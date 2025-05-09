@@ -32,6 +32,12 @@ def fetch_file(
     return output_file_path
 
 
+def highlight_yes(val):
+    if val == "Yes":
+        return "background-color: lightgreen; color: black;"
+    return ""
+
+
 if __name__ == "__main__":
     # Example usage
     task_id = "34e2b1b692444bf6ae37e71dd137c300"

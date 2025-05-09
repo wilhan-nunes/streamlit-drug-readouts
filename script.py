@@ -134,11 +134,34 @@ def stratify_by_drug_class(
     # Final aggregation and binarization
     final_df = pd.concat([agg_abx, agg_depression, exo_drug_agg_thera, exo_drug_agg_fda])
     final_df_TF = final_df > 0
-    final_df_TF = final_df_TF.T
+    final_df_TF = final_df_TF.T.applymap(lambda x: "Yes" if x == True else "No")
     final_df_TF = final_df_TF.reset_index().rename(columns={"index": "Sample"})
     return final_df_TF
 
+
+def count_drug_class_occurrences(feature_annotation: pd.DataFrame, class_column: str = "pharmacologic_class", file_extensions: List[str] = ["mzML", "mzXML"]) -> pd.DataFrame:
+    """
+    Counts the number of times each drug class appears in each sample.
+    :param feature_annotation: Annotated feature intensity data.
+    :param class_column: Column name for drug class (e.g., 'pharmacologic_class').
+    :param file_extensions: File extensions used to select intensity columns.
+    :return: pd.DataFrame: DataFrame with sample-wise counts for each class.
+    """
+    pattern = "|".join(file_extensions)
+    df = feature_annotation.copy()
+    df[class_column] = df[class_column].fillna("NA")
+    df = df[df[class_column] != "NA"]
+    df = df[df[class_column] != "no_match"]
+    df = df.assign(class_group=df[class_column].str.split("\\|")).explode("class_group")
+    df = df[df["class_group"].notna()]
+    df_class = df[["class_group"] + df.filter(regex=pattern).columns.tolist()]
+    df_class_binary = df_class.copy()
+    df_class_binary[df_class_binary.columns[1:]] = df_class_binary[df_class_binary.columns[1:]].gt(0).astype(int)
+    return df_class_binary.groupby("class_group").sum().T
+
 if __name__ == "__main__":
+# --- User-Defined Parameters Section ---
+# This section allows the user to modify parameters for running the script as a standalone file.
     from utils import fetch_file
 
     ## Setup file paths and task IDs
@@ -151,7 +174,6 @@ if __name__ == "__main__":
     analog_metadata_file = "data/GNPS_Drug_Library_Metadata_Drug_Analogs_Updated.csv"
 
     # Load and process data
-
     feature_filtered = load_and_filter_features(quant_file_path)
     annotation_metadata = load_and_merge_annotations(
         annotation_file_path, drug_metadata_file, analog_metadata_file
@@ -162,8 +184,13 @@ if __name__ == "__main__":
     stratified_df = stratify_by_drug_class(feature_annotation, exclude_analogs=True)
     stratified_df_analogs = stratify_by_drug_class(feature_annotation, exclude_analogs=False)
 
+    # adding a summary of drug class occurrence per sample
+    class_count_df = count_drug_class_occurrences(feature_annotation, class_column="pharmacologic_class")
+    class_count_df["total_matches"] = class_count_df.sum(axis=1)
+    class_count_df_sorted = class_count_df.sort_values("total_matches", ascending=False)
+
     # Save the stratified DataFrame to a CSV file
-    stratified_df.to_csv('new_stratified.tsv', sep='\t', index=False)
-    stratified_df_analogs.to_csv('new_stratified_analogs.tsv', sep='\t', index=False)
+    stratified_df.to_csv('stratified.tsv', sep='\t', index=False)
+    stratified_df_analogs.to_csv('stratified_analogs.tsv', sep='\t', index=False)
     feature_annotation.to_csv('feature_annotation.tsv', sep='\t', index=False)
 

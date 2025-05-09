@@ -2,9 +2,9 @@ import streamlit as st
 import uuid  # Added for generating unique identifiers
 
 from script import *
-from utils import fetch_file
+from utils import fetch_file, highlight_yes
 
-#Example url: http://localhost:8501/?taskid=d6f37a11d90c4f249974280c3fc90108&threshold=100
+#Example url: http://localhost:8501/?taskid=d6f37a11d90c4f249974280c3fc90108&threshold=1000
 
 # cute badges
 BADGE_TASK_ID_ = ":green-badge[Task ID]"
@@ -28,7 +28,7 @@ with st.sidebar:
                             placeholder='enter task ID...',
                             value=gnps_task_id)
     # slider to set threshold for the number of features
-    intensity_thresh = st.slider("Peak Area Threshold", min_value=100, max_value=1000, value=int(threshold), step=100,
+    intensity_thresh = st.slider("Peak Area Threshold", min_value=100, max_value=50000, value=int(threshold), step=100,
                                  help="Only detections with peak area above this number will be considered.")
     if not task_id:
         st.warning(f"Please enter a {BADGE_TASK_ID_} from a FBMN Workflow to proceed.", )
@@ -67,20 +67,32 @@ if run_analysis:
             stratified_df = stratify_by_drug_class(feature_annotation, exclude_analogs=True)
             stratified_df_analogs = stratify_by_drug_class(feature_annotation, exclude_analogs=False)
 
-        tab1, tab2, tab3 = st.tabs(
-            ["Feature Annotation", "Stratified (Excluding Analogs)", "Stratified (Including Analogs)"])
+            #Counting drug class occurrence per sample
+            class_count_df = count_drug_class_occurrences(feature_annotation, class_column="pharmacologic_class")
+            class_count_df["total_matches"] = class_count_df.sum(axis=1)
+            class_count_df_sorted = class_count_df.sort_values("total_matches", ascending=False)
+
+        tab1, tab2, tab3, tab4 = st.tabs(
+            ["Feature Annotation", "Drug Detection (Excluding Analogs)", "Drug Detection (Including Analogs)", "Drug Class Summary"])
 
         with tab1:
             st.write("Feature Annotation Table")
             st.dataframe(feature_annotation)
 
         with tab2:
-            st.write("Stratified Table (Excluding Analogs)")
-            st.dataframe(stratified_df)
+            st.write("Drug detection Table (Excluding Analogs)")
+            #Style dataframe to color "yes" and "No"
+            st.dataframe(stratified_df.style.map(highlight_yes))
+
 
         with tab3:
-            st.write("Stratified Table (Including Analogs)")
-            st.dataframe(stratified_df_analogs)
+            st.write("Drug detection Table (Including Analogs)")
+            st.dataframe(stratified_df_analogs.style.map(highlight_yes))
+
+        with tab4:
+            st.write("Drug Class Summary")
+            st.dataframe(class_count_df_sorted)
+
 
     except Exception as e:
         st.error(f"An error occurred: {e}")
