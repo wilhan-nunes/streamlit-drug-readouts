@@ -102,8 +102,8 @@ def stratify_by_drug_class(
     else:
         exo_drug = feature_annotation[~feature_annotation['chemical_source'].str.contains("Background|confidence|Endogenous|Food", na=False)]
 
-    exo_drug['therapeutic_area'] = exo_drug['therapeutic_area'].fillna("NA")
-    exo_drug['pharmacologic_class'] = exo_drug['pharmacologic_class'].fillna("NA")
+    exo_drug.loc[:, 'therapeutic_area'] = exo_drug['therapeutic_area'].fillna("NA")
+    exo_drug.loc[:, 'pharmacologic_class'] = exo_drug['pharmacologic_class'].fillna("NA")
 
     def aggregate_by_column(exo_df, group_col, prefix=None):
         expanded = exo_df.copy()
@@ -134,7 +134,7 @@ def stratify_by_drug_class(
     # Final aggregation and binarization
     final_df = pd.concat([agg_abx, agg_depression, exo_drug_agg_thera, exo_drug_agg_fda])
     final_df_TF = final_df > 0
-    final_df_TF = final_df_TF.T.applymap(lambda x: "Yes" if x == True else "No")
+    final_df_TF = final_df_TF.T.map(lambda x: "Yes" if x == True else "No")
     final_df_TF = final_df_TF.reset_index().rename(columns={"index": "Sample"})
     return final_df_TF
 

@@ -1,6 +1,9 @@
 import streamlit as st
 import uuid  # Added for generating unique identifiers
 
+# Set wide mode as default
+st.set_page_config(layout="wide")
+
 from script import *
 from utils import fetch_file, highlight_yes
 
@@ -8,8 +11,6 @@ from utils import fetch_file, highlight_yes
 
 # cute badges
 BADGE_TASK_ID_ = ":green-badge[Task ID]"
-UPLOAD_QUANT_TABLE_ = ":blue-badge[Upload Quant Table]"
-BADGE_QUANT_TABLE_ = ":orange-badge[Quant Table]"
 
 # Streamlit app title
 st.title("Drug Readout Analysis")
@@ -28,7 +29,7 @@ with st.sidebar:
                             placeholder='enter task ID...',
                             value=gnps_task_id)
     # slider to set threshold for the number of features
-    intensity_thresh = st.slider("Peak Area Threshold", min_value=100, max_value=50000, value=int(threshold), step=100,
+    intensity_thresh = st.number_input("Peak Area Threshold", min_value=100, max_value=50000, value=int(threshold), step=100,
                                  help="Only detections with peak area above this number will be considered.")
     if not task_id:
         st.warning(f"Please enter a {BADGE_TASK_ID_} from a FBMN Workflow to proceed.", )
@@ -72,27 +73,41 @@ if run_analysis:
             class_count_df["total_matches"] = class_count_df.sum(axis=1)
             class_count_df_sorted = class_count_df.sort_values("total_matches", ascending=False)
 
-        tab1, tab2, tab3, tab4 = st.tabs(
-            ["Feature Annotation", "Drug Detection (Excluding Analogs)", "Drug Detection (Including Analogs)", "Drug Class Summary"])
+
+        tab4, tab1, tab2, tab3 = st.tabs(
+            ["Summary Statistics", "Feature Annotation", "Drug Detection Tables", "Drug Class Summary"])
 
         with tab1:
             st.write("Feature Annotation Table")
             st.dataframe(feature_annotation)
 
         with tab2:
-            st.write("Drug detection Table (Excluding Analogs)")
-            #Style dataframe to color "yes" and "No"
-            st.dataframe(stratified_df.style.map(highlight_yes))
-
+            st.write("Drug Detection Tables")
+            with st.expander("Excluding Analogs", expanded=True):
+                st.dataframe(stratified_df.style.map(highlight_yes))
+            with st.expander("Including Analogs", expanded=False):
+                st.dataframe(stratified_df_analogs.style.map(highlight_yes))
 
         with tab3:
-            st.write("Drug detection Table (Including Analogs)")
-            st.dataframe(stratified_df_analogs.style.map(highlight_yes))
+            st.write("Top detected drug classes")
+            top_pharm_num = st.number_input("Top classes to display", min_value=1, max_value=20, value=10, key="top_classes",
+                                           help="Number of top pharmacologic classes to display based on total detections.")
+            top_pharm_classes = class_count_df_sorted.sum(axis=0).nlargest(top_pharm_num)
+            st.dataframe(top_pharm_classes.reset_index().rename(columns={'index': 'Pharmacologic Class', 0: 'Total Detections'}))
+            class_count_df_sorted.index = class_count_df_sorted.index.str.replace(r'\.(mzML|mzXML) Peak area', '', regex=True)
+
+            st.write("Drug class summary by sample")
+            st.dataframe(class_count_df_sorted[["total_matches"] + class_count_df_sorted.columns.tolist()[:-1]].reset_index().rename(columns={'index': 'Sample'}))
 
         with tab4:
-            st.write("Drug Class Summary")
-            st.dataframe(class_count_df_sorted)
-
+            st.subheader("Summary Statistics")
+            antibiotic_count = (stratified_df["antibiotics"] == "Yes").sum()
+            antidepressant_count = (stratified_df["antidepressants"] == "Yes").sum()
+            sample_count = len(stratified_df)
+            antibiotic_pct = (antibiotic_count / sample_count) * 100 if sample_count > 0 else 0
+            antidepressant_pct = (antidepressant_count / sample_count) * 100 if sample_count > 0 else 0
+            st.markdown(f"**Samples with Antibiotics:** {antibiotic_count} ({antibiotic_pct:.2f}\\%)")
+            st.markdown(f"**Samples with Antidepressants:** {antidepressant_count} ({antidepressant_pct:.2f}\\%)")
 
     except Exception as e:
         st.error(f"An error occurred: {e}")
