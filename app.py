@@ -1,13 +1,18 @@
-import streamlit as st
 import uuid  # Added for generating unique identifiers
+
+import streamlit as st
+import re
 
 # Set wide mode as default
 st.set_page_config(layout="wide")
 
+if "run_analysis" not in st.session_state:
+    st.session_state.run_analysis = False
+
 from script import *
 from utils import fetch_file, highlight_yes
 
-#Example url: http://localhost:8501/?taskid=d6f37a11d90c4f249974280c3fc90108&threshold=1000
+# Example url: http://localhost:8501/?taskid=d6f37a11d90c4f249974280c3fc90108&threshold=1000
 
 # cute badges
 BADGE_TASK_ID_ = ":green-badge[Task ID]"
@@ -19,6 +24,7 @@ st.title("Drug Readout Analysis")
 query_params = st.query_params
 gnps_task_id = query_params.get('taskid', '')
 threshold = query_params.get('threshold', 100)
+blank_str = query_params.get('blank_ids', None)
 
 # Sidebar inputs
 with st.sidebar:
@@ -29,13 +35,23 @@ with st.sidebar:
                             placeholder='enter task ID...',
                             value=gnps_task_id)
     # slider to set threshold for the number of features
-    intensity_thresh = st.number_input("Peak Area Threshold", min_value=100, max_value=50000, value=int(threshold), step=100,
-                                 help="Only detections with peak area above this number will be considered.")
+    intensity_thresh = st.number_input("Peak Area Threshold", min_value=100, max_value=50000, value=int(threshold),
+                                       step=100,
+                                       help="Only detections with peak area above this number will be considered.")
+
+    blank_ids = st.text_input("Blank IDs (optional)", value=blank_str, placeholder="Example: BLANK|IS|PoolQC|QCmix|SRM",
+                              help="Enter substrings to identify blank or control columns, separated by '|'. If given, the table will be filtered to remove these columns from the analysis. If not provided, all columns will be considered.")
+
     if not task_id:
         st.warning(f"Please enter a {BADGE_TASK_ID_} from a FBMN Workflow to proceed.", )
 
-    run_analysis = st.button("Run Analysis", help="Click to start the analysis with the provided inputs.",
-                             use_container_width=True)
+    run_analysis = st.button("Run Analysis", icon="🏁", help="Click to start the analysis with the provided inputs.",
+                             use_container_width=True, key="run_analysis_button")
+
+    if st.button('Restart Session', icon="♻️" ,key='restart_session', use_container_width=True, type='primary'):
+        # Reset the session state
+        st.session_state.clear()
+        st.rerun()
 
 # Process files when task ID and sample feature table are provided
 if run_analysis:
@@ -46,68 +62,52 @@ if run_analysis:
         # Retrieve lib_search using the task ID
         with st.spinner("Downloading Task result files..."):
             quant_file_path = fetch_file(task_id, f"quant_table_{unique_id}.csv", type="quant_table")
-            st.markdown(f"Quant table downloaded successfully from task {task_id}! [Download](https://gnps2.org/result?task={task_id}&viewname=quantificationdownload&resultdisplay_type=task)", unsafe_allow_html=True)
+            st.markdown(
+                f":white_check_mark: Quant table ({task_id}) [Download](https://gnps2.org/result?task={task_id}&viewname=quantificationdownload&resultdisplay_type=task)",
+                unsafe_allow_html=True)
             annotation_file_path = fetch_file(
                 task_id, f"annotations_{unique_id}.tsv", type="annotation_table"
             )
             st.markdown(
-                f"Annotation table downloaded successfully from task {task_id}! [Download](https://gnps2.org/resultfile?task={task_id}&file=nf_output/library/merged_results_with_gnps.tsv)")
+                f":white_check_mark: Annotation table ({task_id}) [Download](https://gnps2.org/resultfile?task={task_id}&file=nf_output/library/merged_results_with_gnps.tsv)")
+
             drug_metadata_file = "data/GNPS_Drug_Library_Metadata_Drugs.csv"
             analog_metadata_file = "data/GNPS_Drug_Library_Metadata_Drug_Analogs_Updated.csv"
 
         # Process data
         with st.spinner("Processing data..."):
+            subtract_blanks = True if blank_ids else False
+            feature_filtered = load_and_filter_features(quant_file_path, intensity_threshold=intensity_thresh,
+                                                        blank_ids=blank_ids, subtract_blanks=subtract_blanks)
 
-            feature_filtered = load_and_filter_features(quant_file_path, intensity_threshold=intensity_thresh)
             annotation_metadata = load_and_merge_annotations(
                 annotation_file_path, drug_metadata_file, analog_metadata_file
             )
-            feature_annotation = generate_feature_annotation(
-                annotation_metadata, feature_filtered
-            )
+
+            if "feature_annotation_edited" in st.session_state:
+                # If the user has edited the feature annotation, use that instead of the original
+                feature_annotation = st.session_state.feature_annotation_edited
+            else:
+                feature_annotation = generate_feature_annotation(
+                    annotation_metadata, feature_filtered
+                )
+
+            # Perform analysis
             stratified_df = stratify_by_drug_class(feature_annotation, exclude_analogs=True)
             stratified_df_analogs = stratify_by_drug_class(feature_annotation, exclude_analogs=False)
 
-            #Counting drug class occurrence per sample
+            # Counting drug class occurrence per sample
             class_count_df = count_drug_class_occurrences(feature_annotation, class_column="pharmacologic_class")
             class_count_df["total_matches"] = class_count_df.sum(axis=1)
             class_count_df_sorted = class_count_df.sort_values("total_matches", ascending=False)
 
+            # store all dataframes in session state
+            st.session_state.feature_annotation = feature_annotation
+            st.session_state.stratified_df = stratified_df
+            st.session_state.stratified_df_analogs = stratified_df_analogs
+            st.session_state.class_count_df_sorted = class_count_df_sorted
 
-        tab4, tab1, tab2, tab3 = st.tabs(
-            ["Summary Statistics", "Feature Annotation", "Drug Detection Tables", "Drug Class Summary"])
-
-        with tab1:
-            st.write("Feature Annotation Table")
-            st.dataframe(feature_annotation)
-
-        with tab2:
-            st.write("Drug Detection Tables")
-            with st.expander("Excluding Analogs", expanded=True):
-                st.dataframe(stratified_df.style.map(highlight_yes))
-            with st.expander("Including Analogs", expanded=False):
-                st.dataframe(stratified_df_analogs.style.map(highlight_yes))
-
-        with tab3:
-            st.write("Top detected drug classes")
-            top_pharm_num = st.number_input("Top classes to display", min_value=1, max_value=20, value=10, key="top_classes",
-                                           help="Number of top pharmacologic classes to display based on total detections.")
-            top_pharm_classes = class_count_df_sorted.sum(axis=0).nlargest(top_pharm_num)
-            st.dataframe(top_pharm_classes.reset_index().rename(columns={'index': 'Pharmacologic Class', 0: 'Total Detections'}))
-            class_count_df_sorted.index = class_count_df_sorted.index.str.replace(r'\.(mzML|mzXML) Peak area', '', regex=True)
-
-            st.write("Drug class summary by sample")
-            st.dataframe(class_count_df_sorted[["total_matches"] + class_count_df_sorted.columns.tolist()[:-1]].reset_index().rename(columns={'index': 'Sample'}))
-
-        with tab4:
-            st.subheader("Summary Statistics")
-            antibiotic_count = (stratified_df["antibiotics"] == "Yes").sum()
-            antidepressant_count = (stratified_df["antidepressants"] == "Yes").sum()
-            sample_count = len(stratified_df)
-            antibiotic_pct = (antibiotic_count / sample_count) * 100 if sample_count > 0 else 0
-            antidepressant_pct = (antidepressant_count / sample_count) * 100 if sample_count > 0 else 0
-            st.markdown(f"**Samples with Antibiotics:** {antibiotic_count} ({antibiotic_pct:.2f}\\%)")
-            st.markdown(f"**Samples with Antidepressants:** {antidepressant_count} ({antidepressant_pct:.2f}\\%)")
+            st.session_state.run_analysis = True
 
     except Exception as e:
         st.error(f"An error occurred: {e}")
@@ -115,3 +115,116 @@ if run_analysis:
 else:
     st.info(
         ":information_source: Please, provide the inputs, then click Run Analysis.")
+
+# Display results if analysis has been run
+if st.session_state.run_analysis:
+    # Summary Statistics Section
+    st.header("📊 Summary Statistics")
+    stratified_df = st.session_state.get("stratified_df")
+    antibiotic_count = (stratified_df["antibiotics"] == "Yes").sum()
+    antidepressant_count = (stratified_df["antidepressants"] == "Yes").sum()
+    sample_count = len(stratified_df)
+    antibiotic_pct = (antibiotic_count / sample_count) * 100 if sample_count > 0 else 0
+    antidepressant_pct = (antidepressant_count / sample_count) * 100 if sample_count > 0 else 0
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Samples with Antibiotics", f"{antibiotic_count} ({antibiotic_pct:.2f}%)")
+    with col2:
+        st.metric("Samples with Antidepressants", f"{antidepressant_count} ({antidepressant_pct:.2f}%)")
+
+    st.divider()
+
+    # Feature Annotation Table Section
+    st.header("🔬 Feature Annotation Table")
+    st.write("You can edit the table below and then rerun the analysis with your modifications.")
+
+    # Store the original dataframe in session state if not already there
+    if "feature_annotation_edited" not in st.session_state:
+        st.session_state.feature_annotation_edited = st.session_state.feature_annotation.copy()
+
+    # Use data_editor to allow editing and preserve changes
+    edited_df = st.data_editor(
+        st.session_state.feature_annotation_edited,
+        key="feature_annotation_editor",
+        use_container_width=True,
+        num_rows="dynamic",
+        height=400
+    )
+
+    # Update session state with edits
+    st.session_state.feature_annotation_edited = edited_df
+
+    # Rerun button
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        rerun_button = st.button("🔄 Rerun Analysis with Edited Data",
+                                 use_container_width=True,
+                                 type="primary")
+
+    if rerun_button:
+        with st.spinner("Reprocessing data with edited annotations..."):
+            # Use the edited feature annotation for reanalysis
+            feature_annotation = st.session_state.feature_annotation_edited
+
+            # Perform analysis with edited data
+            stratified_df = stratify_by_drug_class(feature_annotation, exclude_analogs=True)
+            stratified_df_analogs = stratify_by_drug_class(feature_annotation, exclude_analogs=False)
+
+            # Counting drug class occurrence per sample
+            class_count_df = count_drug_class_occurrences(feature_annotation, class_column="pharmacologic_class")
+            class_count_df["total_matches"] = class_count_df.sum(axis=1)
+            class_count_df_sorted = class_count_df.sort_values("total_matches", ascending=False)
+
+            # Update session state with new results
+            st.session_state.stratified_df = stratified_df
+            st.session_state.stratified_df_analogs = stratified_df_analogs
+            st.session_state.class_count_df_sorted = class_count_df_sorted
+
+            st.success("Analysis updated with edited data!")
+            st.rerun()
+
+    st.divider()
+
+    # Drug Detection Tables Section
+    st.header("🧪 Drug Detection Tables")
+
+    stratified_df = st.session_state.get("stratified_df")
+    stratified_df_analogs = st.session_state.get("stratified_df_analogs")
+
+    # optional: clean up sample names
+    stratified_df['Sample'] = stratified_df['Sample'].str.replace(r'\.mz[XM]L Peak area', '', regex=True)
+    stratified_df_analogs['Sample'] = stratified_df_analogs['Sample'].str.replace(r'\.mz[XM]L Peak area', '', regex=True)
+
+    st.subheader("Excluding Analogs")
+    st.dataframe(stratified_df.style.map(highlight_yes), use_container_width=True)
+
+    with st.expander("Show results including analogs"):
+        st.dataframe(stratified_df_analogs.style.map(highlight_yes), use_container_width=True)
+
+    st.divider()
+
+    # Drug Class Summary Section
+    st.header("📈 Drug Class Summary")
+
+    class_count_df_sorted = st.session_state.get("class_count_df_sorted")
+
+    st.subheader("Top Detected Drug Classes")
+    nlarge = st.number_input("Number of Top Classes to Display", min_value=1, value=10, key="top_classes_input")
+    top_pharm_classes = class_count_df_sorted.sum(axis=0).nlargest(nlarge)
+    st.dataframe(
+        top_pharm_classes.reset_index().rename(columns={'index': 'Pharmacologic Class', 0: 'Total Detections'}),
+        use_container_width=True
+    )
+
+    st.subheader("Drug Class Summary by Sample")
+    # Clean up sample names
+    class_count_df_display = class_count_df_sorted.copy()
+    class_count_df_display.index = class_count_df_display.index.str.replace(r'\.(mzML|mzXML) Peak area', '', regex=True)
+    class_count_df_display = class_count_df_display[["total_matches"] + class_count_df_display.columns.tolist()[:-1]].reset_index().rename(
+            columns={'index': 'Sample'})
+
+    st.dataframe(
+        class_count_df_display,
+        use_container_width=True
+    )
