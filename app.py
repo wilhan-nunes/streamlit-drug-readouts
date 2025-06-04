@@ -12,7 +12,7 @@ if "run_analysis" not in st.session_state:
 from script import *
 from utils import fetch_file, highlight_yes
 
-# Example url: http://localhost:8501/?taskid=d6f37a11d90c4f249974280c3fc90108&threshold=1000
+# Example url: http://localhost:8501/?taskid=d6f37a11d90c4f249974280c3fc90108&threshold=1000&blank_ids=QC
 
 # cute badges
 BADGE_TASK_ID_ = ":green-badge[Task ID]"
@@ -205,17 +205,97 @@ if st.session_state.run_analysis:
     st.divider()
 
     # Drug Class Summary Section
+
+    import matplotlib.pyplot as plt
+    from upsetplot import plot, from_indicators
+
+    # Drug Class Summary Section
     st.header("📈 Drug Class Summary")
 
     class_count_df_sorted = st.session_state.get("class_count_df_sorted")
 
-    st.subheader("Top Detected Drug Classes")
-    nlarge = st.number_input("Number of Top Classes to Display", min_value=1, value=10, key="top_classes_input")
-    top_pharm_classes = class_count_df_sorted.sum(axis=0).nlargest(nlarge)
-    st.dataframe(
-        top_pharm_classes.reset_index().rename(columns={'index': 'Pharmacologic Class', 0: 'Total Detections'}),
-        use_container_width=True
-    )
+    # Create tabs for different visualizations
+    tab_plot, tab_table = st.tabs(["🔀 UpSet Plot", "📊 Top Classes Table", ])
+
+    with tab_plot:
+        st.subheader("Drug Class Co-occurrence Analysis")
+        st.write("This UpSet plot shows how different drug classes co-occur across samples. Each bar represents a unique combination of drug classes.")
+
+        # Controls for UpSet plot
+        col1, col2 = st.columns(2)
+        with col1:
+            n_top_classes = st.number_input("Number of Top Classes for UpSet Plot",
+                                           min_value=3, max_value=20, value=4,
+                                           key="upset_classes_input",
+                                           help="Select how many top drug classes to include in the UpSet plot")
+        with col2:
+            max_samples = st.number_input("Maximum Samples to Include",
+                                         min_value=10, max_value=200, value=50,
+                                         key="upset_samples_input",
+                                         help="Limit the number of samples to avoid overcrowding")
+
+        try:
+            # Prepare binary matrix for top classes
+            top_classes = class_count_df_sorted.sum(axis=0).nlargest(n_top_classes).index.tolist()
+            if "total_matches" in top_classes:
+                top_classes.remove("total_matches")
+
+            # Create binary matrix (presence/absence)
+            binary_matrix = (class_count_df_sorted[top_classes] > 0).astype(int)
+            binary_matrix.index.name = "Sample"
+
+            # Limit number of samples to avoid overcrowding
+            limited_matrix = binary_matrix.head(max_samples)
+
+            # Remove samples with no detections in the selected classes
+            limited_matrix = limited_matrix[limited_matrix.sum(axis=1) > 0]
+
+            if len(limited_matrix) == 0:
+                st.warning("No samples found with detections in the selected drug classes. Try adjusting the parameters.")
+            else:
+                # Create UpSet plot data
+                upset_data = from_indicators(top_classes, limited_matrix.astype(bool))
+
+                # Create the plot
+                fig = plt.figure(figsize=(12, 8))
+                plot(upset_data,
+                     subset_size='count',
+                     show_counts=True,
+                     fig=fig,
+                     sort_by='cardinality',
+                     element_size=40)
+
+                plt.suptitle(f'Drug Class Co-occurrence Analysis\n({len(limited_matrix)} samples, {len(top_classes)} drug classes)',
+                            fontsize=14, y=0.98)
+
+                st.pyplot(fig)
+
+                # Add interpretation help
+                with st.expander("How to interpret this UpSet plot"):
+                    st.write("""
+                    - **Horizontal bars (left)**: Show the total number of samples containing each individual drug class
+                    - **Vertical bars (bottom)**: Show the number of samples with each specific combination of drug classes
+                    - **Connected dots**: Indicate which drug classes are part of each combination
+                    - **Larger vertical bars**: Represent more common co-occurrence patterns
+                    - **Single dots**: Show samples with only one drug class detected
+                    - **Multiple connected dots**: Show samples with multiple drug classes detected together
+                    """)
+
+                plt.close()  # Clean up the figure
+
+        except Exception as e:
+            st.error(f"Error creating UpSet plot: {str(e)}")
+            st.info("This might be due to insufficient data or missing dependencies. Make sure you have the 'upsetplot' package installed.")
+
+    with tab_table:
+        st.subheader("Top Detected Drug Classes")
+        nlarge = st.number_input("Number of Top Classes to Display", min_value=1, value=10, key="top_classes_input")
+        top_pharm_classes = class_count_df_sorted.sum(axis=0).nlargest(nlarge)
+        st.dataframe(
+            top_pharm_classes.reset_index().rename(columns={'index': 'Pharmacologic Class', 0: 'Total Detections'}),
+            use_container_width=True
+        )
+
 
     st.subheader("Drug Class Summary by Sample")
     # Clean up sample names
