@@ -1,7 +1,6 @@
 import uuid  # Added for generating unique identifiers
 
 import streamlit as st
-import re
 
 # Set wide mode as default
 st.set_page_config(layout="wide")
@@ -10,7 +9,7 @@ if "run_analysis" not in st.session_state:
     st.session_state.run_analysis = False
 
 from script import *
-from utils import fetch_file, highlight_yes
+from utils import fetch_file, highlight_yes, add_sankey_graph
 
 # Example url: http://localhost:8501/?taskid=d6f37a11d90c4f249974280c3fc90108&threshold=1000&blank_ids=QC
 
@@ -187,7 +186,7 @@ if st.session_state.run_analysis:
 
     # Feature Annotation Table Section
     st.header("🔬 Feature Annotation Table")
-    st.write("You can edit the table below and then rerun the analysis with your modifications.")
+    st.write('You can edit the table below and then rerun the analysis with your modifications. [Learn how](https://www.youtube.com/watch?v=6tah69LkfxE&list=TLGGKK4Dnf1gepcwNTA2MjAyNQ)')
 
     # Store the original dataframe in session state if not already there
     if "feature_annotation_edited" not in st.session_state:
@@ -275,21 +274,19 @@ if st.session_state.run_analysis:
         col1, col2 = st.columns(2)
         with col1:
             n_top_classes = st.number_input("Number of Top Classes for UpSet Plot",
-                                           min_value=3, max_value=20, value=4,
+                                           min_value=1, value=4,
                                            key="upset_classes_input",
                                            help="Select how many top drug classes to include in the UpSet plot")
         with col2:
             max_samples = st.number_input("Maximum Samples to Include",
-                                         min_value=10, max_value=200, value=50,
+                                         min_value=1, value=50,
                                          key="upset_samples_input",
                                          help="Limit the number of samples to avoid overcrowding")
 
         try:
             # Prepare binary matrix for top classes
-            top_classes = class_count_df_sorted.sum(axis=0).nlargest(n_top_classes).index.tolist()
-            if "total_matches" in top_classes:
-                top_classes.remove("total_matches")
-
+            top_classes = class_count_df_sorted.sum(axis=0).nlargest(n_top_classes+1).index.tolist()
+            top_classes.remove("total_matches")
             # Create binary matrix (presence/absence)
             binary_matrix = (class_count_df_sorted[top_classes] > 0).astype(int)
             binary_matrix.index.name = "Sample"
@@ -358,3 +355,6 @@ if st.session_state.run_analysis:
         class_count_df_display,
         use_container_width=True
     )
+
+
+    add_sankey_graph()
