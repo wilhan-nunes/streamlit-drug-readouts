@@ -136,38 +136,41 @@ def stratify_by_drug_class(
     if exclude_analogs:
         exo_drug = feature_annotation[
             ~feature_annotation["chemical_source"].str.contains(
-                "Background|confidence|Endogenous|Food|analog", na=False
+                "Background|confidence|Endogenous|Food|analog", case=False, na=False
             )
         ]
     else:
         exo_drug = feature_annotation[
             ~feature_annotation["chemical_source"].str.contains(
-                "Background|confidence|Endogenous|Food", na=False
+                "Background|confidence|Endogenous|Food", case=False, na=False
             )
         ]
 
+    # Fill NaN values
+    exo_drug = exo_drug.copy()
     exo_drug.loc[:, "therapeutic_area"] = exo_drug["therapeutic_area"].fillna("NA")
-    exo_drug.loc[:, "pharmacologic_class"] = exo_drug["pharmacologic_class"].fillna(
-        "NA"
-    )
+    exo_drug.loc[:, "pharmacologic_class"] = exo_drug["pharmacologic_class"].fillna("NA")
+    exo_drug.loc[:, "therapeutic_indication"] = exo_drug["therapeutic_indication"].fillna("NA")
 
     def aggregate_by_column(exo_df, group_col, prefix=None):
         expanded = exo_df.copy()
         expanded[group_col] = expanded[group_col].astype(str).str.split("|")
         expanded = expanded.explode(group_col)
         expanded = expanded[~expanded[group_col].isin(["NA", "no_match"])]
+        if expanded.empty:
+            # Return empty DataFrame with correct structure if no data
+            empty_df = pd.DataFrame(columns=sample_columns)
+            if prefix:
+                empty_df.index = [prefix] if isinstance(prefix, str) else prefix
+            return empty_df
         aggregate = expanded.groupby(group_col)[sample_columns].sum()
         if prefix:
-            aggregate.index = [prefix] * len(aggregate)
+            aggregate.index = [prefix] * len(aggregate) if isinstance(prefix, str) else prefix
         return aggregate
 
-    # Therapeutic Area
-    exo_drug_agg_thera = aggregate_by_column(exo_drug, "therapeutic_area")
+    # === Specific Drug Categories ===
 
-    # Pharmacologic Class (FDA)
-    exo_drug_agg_fda = aggregate_by_column(exo_drug, "pharmacologic_class")
-
-    # Antidepressants
+    # 1. Antidepressants
     depression = exo_drug[
         exo_drug["therapeutic_indication"].str.contains(
             "depression", case=False, na=False
@@ -176,7 +179,7 @@ def stratify_by_drug_class(
     agg_depression = depression[sample_columns].sum().to_frame().T
     agg_depression.index = ["antidepressants"]
 
-    # Antibiotics
+    # 2. Antibiotics
     abx = exo_drug[
         exo_drug["pharmacologic_class"].str.contains(
             "microbial|bacterial|tetracycline", case=False, na=False
@@ -185,13 +188,117 @@ def stratify_by_drug_class(
     agg_abx = abx[sample_columns].sum().to_frame().T
     agg_abx.index = ["antibiotics"]
 
+    # 3. PPIs (Proton Pump Inhibitors)
+    ppi = exo_drug[
+        exo_drug["pharmacologic_class"].str.contains(
+            "proton pump inhibitor", case=False, na=False
+        )
+    ]
+    agg_ppi = ppi[sample_columns].sum().to_frame().T
+    agg_ppi.index = ["PPI"]
+
+
+    # 4. Statins
+    statin = exo_drug[
+        exo_drug["pharmacologic_class"].str.contains(
+            "statin|HMG-CoA reductase inhibitor", case=False, na=False
+        )
+    ]
+    agg_statin = statin[sample_columns].sum().to_frame().T
+    agg_statin.index = ["statin"]
+
+    # 5. Antihistamines
+    antihistamine = exo_drug[
+        exo_drug["pharmacologic_class"].str.contains(
+            "histamine-1", case=False, na=False
+        )
+    ]
+    agg_antihistamine = antihistamine[sample_columns].sum().to_frame().T
+    agg_antihistamine.index = ["antihistamine"]
+
+    # 6. Antihypertensives
+    antihypertensives = exo_drug[
+        exo_drug["therapeutic_indication"].str.contains(
+            "hypertension", case=False, na=False
+        )
+    ]
+    agg_antihypertensives = antihypertensives[sample_columns].sum().to_frame().T
+    agg_antihypertensives.index = ["antihypertensive"]
+
+    # 7. Alzheimer's medications
+    alzheimer = exo_drug[
+        exo_drug["therapeutic_indication"].str.contains(
+            "Alzheimer", case=False, na=False
+        )
+    ]
+    agg_alzheimer = alzheimer[sample_columns].sum().to_frame().T
+    agg_alzheimer.index = ["Alzheimer"]
+
+    # 8. Antifungals
+    antifungal = exo_drug[
+        (exo_drug["pharmacologic_class"].str.contains(
+            "antifungal", case=False, na=False
+        )) |
+        (exo_drug["therapeutic_indication"].str.contains(
+            "fungal infection", case=False, na=False
+        ))
+    ]
+    agg_antifungal = antifungal[sample_columns].sum().to_frame().T
+    agg_antifungal.index = ["antifungal"]
+
+    # 9. HIV medications
+    hiv_med = exo_drug[
+        (exo_drug["therapeutic_indication"].str.contains(
+            "HIV", case=False, na=False
+        )) |
+        (exo_drug["therapeutic_indication"].str.contains(
+            "atazanavir", case=False, na=False
+        ))
+    ]
+    agg_hiv_med = hiv_med[sample_columns].sum().to_frame().T
+    agg_hiv_med.index = ["HIVmed"]
+
+    # === General Categories ===
+
+    # 10. Therapeutic Area aggregation
+    exo_drug_agg_thera = aggregate_by_column(exo_drug, "therapeutic_area")
+
+    # 11. Pharmacologic Class (FDA) aggregation
+    exo_drug_agg_fda = aggregate_by_column(exo_drug, "pharmacologic_class")
+
+    # === Combine All Categories ===
+
+    # Collect all aggregated DataFrames
+    all_dfs = [
+        agg_abx,
+        agg_depression,
+        agg_ppi,
+        agg_statin,
+        agg_antihistamine,
+        agg_antihypertensives,
+        agg_alzheimer,
+        agg_antifungal,
+        agg_hiv_med,
+        exo_drug_agg_thera,
+        exo_drug_agg_fda
+    ]
+
+    # Filter out empty DataFrames
+    non_empty_dfs = [df for df in all_dfs if not df.empty]
+
+    if not non_empty_dfs:
+        # Return empty DataFrame with correct structure if no data
+        empty_result = pd.DataFrame(columns=["Sample"])
+        return empty_result
+
     # Final aggregation and binarization
-    final_df = pd.concat(
-        [agg_abx, agg_depression, exo_drug_agg_thera, exo_drug_agg_fda]
-    )
+    final_df = pd.concat(non_empty_dfs, sort=False)
+
+    # Convert to binary (True/False) then to Yes/No
     final_df_TF = final_df > 0
-    final_df_TF = final_df_TF.T.map(lambda x: "Yes" if x == True else "No")
+    final_df_TF = final_df_TF.T.map(lambda x: "Yes" if x else "No")
     final_df_TF = final_df_TF.reset_index().rename(columns={"index": "Sample"})
+
     return final_df_TF
 
 
