@@ -6,6 +6,17 @@ import plotly.graph_objects as go
 import requests
 import streamlit as st
 
+import colorsys
+
+def generate_colors(n, base_color=(0.55, 0.85, 0.9)):
+    # base_color is in HSV, e.g., light blue
+    colors = []
+    for i in range(n):
+        hue = (base_color[0] + i / n) % 1.0
+        rgb = colorsys.hsv_to_rgb(hue, base_color[1], base_color[2])
+        rgba = f'rgba({int(rgb[0] * 255)}, {int(rgb[1] * 255)}, {int(rgb[2] * 255)}, 0.8)'
+        colors.append(rgba)
+    return colors
 
 @st.cache_data
 def fetch_file(
@@ -40,14 +51,14 @@ def highlight_yes(val):
     return ""
 
 
-def create_source_to_pharm_sankey(feature_annotation: pd.DataFrame, top_n_pharm: int = 10):
+def create_source_to_thera_sankey(feature_annotation: pd.DataFrame, top_n_pharm: int = 10):
     """
-    Creates a Sankey diagram showing the flow from chemical source to pharmacological class.
+    Creates a Sankey diagram showing the flow from chemical source to therapeutical area use.
     The flow values represent the number of samples (columns with "Peak" in name) that have
-    non-zero values for each source-pharmacological class combination.
+    non-zero values for each source-therapeutical area combination.
 
     :param feature_annotation: DataFrame with feature annotations
-    :param top_n_pharm: Number of top pharmacological classes to include
+    :param top_n_pharm: Number of top therapeutic area to include
     :return: Plotly figure object
     """
     # Prepare the data
@@ -64,56 +75,55 @@ def create_source_to_pharm_sankey(feature_annotation: pd.DataFrame, top_n_pharm:
     df['source_clean'] = df['chemical_source'].fillna('Unknown').apply(
         lambda x: x.split('|')[0] if pd.notna(x) and '|' in str(x) else str(x)
     )
-
-    # Clean up pharmacologic_class and handle NaN values
-    df['pharm_clean'] = df['pharmacologic_class'].fillna('Unknown')
+    df['thera_clean'] = df['therapeutic_area'].fillna('Unknown')
 
     # Filter out rows where both are Unknown or NA
-    df = df[(df['source_clean'] != 'Unknown') | (df['pharm_clean'] != 'Unknown')]
-    df = df[df['pharm_clean'] != 'no_match']
+    df = df[(df['source_clean'] != 'Unknown') | (df['thera_clean'] != 'Unknown')]
+    df = df[df['thera_clean'] != 'no_match']
 
-    # Expand pharmacologic_class (handle multiple values separated by |)
+    # Expand therapeutic_area (handle multiple values separated by |)
     df_expanded = df.copy()
-    df_expanded['pharm_clean'] = df_expanded['pharm_clean'].astype(str).str.split('|')
-    df_expanded = df_expanded.explode('pharm_clean')
-    df_expanded = df_expanded[df_expanded['pharm_clean'].notna()]
-    df_expanded = df_expanded[df_expanded['pharm_clean'] != 'Unknown']
-    df_expanded = df_expanded[df_expanded['pharm_clean'] != 'NA']
+    #TODO: Maybe this is not necessary?
+    df_expanded['thera_clean'] = df_expanded['thera_clean'].astype(str).str.split('|')
+    df_expanded = df_expanded.explode('thera_clean')
+    df_expanded = df_expanded[df_expanded['thera_clean'].notna()]
+    df_expanded = df_expanded[df_expanded['thera_clean'] != 'Unknown']
+    df_expanded = df_expanded[df_expanded['thera_clean'] != 'NA']
 
     if df_expanded.empty:
         st.warning("No valid data found for Sankey diagram.")
         return None
 
-    # Calculate sample counts for each pharmacological class to determine top N
-    pharm_sample_counts = {}
-    for pharm_class in df_expanded['pharm_clean'].unique():
-        pharm_data = df_expanded[df_expanded['pharm_clean'] == pharm_class]
+    # Calculate sample counts for each therapeutic area to determine top N
+    thera_sample_counts = {}
+    for therapeutical_use in df_expanded['thera_clean'].unique():
+        thera_data = df_expanded[df_expanded['thera_clean'] == therapeutical_use]
         # Count samples (columns) where at least one feature of this class has > 0 value
         sample_count = 0
         for col in peak_columns:
-            if (pharm_data[col] > 0).any():
+            if (thera_data[col] > 0).any():
                 sample_count += 1
-        pharm_sample_counts[pharm_class] = sample_count
+        thera_sample_counts[therapeutical_use] = sample_count
 
-    # Get top N pharmacological classes based on sample counts
-    top_pharm_classes = sorted(pharm_sample_counts.items(), key=lambda x: x[1], reverse=True)[:top_n_pharm]
-    top_pharm_classes = [pharm for pharm, _ in top_pharm_classes]
+    # Get top N therapeutic area based on sample counts
+    top_thera_use = sorted(thera_sample_counts.items(), key=lambda x: x[1], reverse=True)[:top_n_pharm]
+    top_thera_use = [thera for thera, _ in top_thera_use]
 
-    # Filter to only include top pharmacological classes
-    df_filtered = df_expanded[df_expanded['pharm_clean'].isin(top_pharm_classes)]
+    # Filter to only include top therapeutic area
+    df_filtered = df_expanded[df_expanded['thera_clean'].isin(top_thera_use)]
 
     if df_filtered.empty:
-        st.warning("No data available after filtering for top pharmacological classes.")
+        st.warning("No data available after filtering for top therapeutic areas.")
         return None
 
     # Create source-target pairs and count samples with non-zero values
     flow_data = []
     for source in df_filtered['source_clean'].unique():
-        for pharm in df_filtered['pharm_clean'].unique():
+        for thera in df_filtered['thera_clean'].unique():
             # Get data for this source-pharm combination
             subset = df_filtered[
                 (df_filtered['source_clean'] == source) &
-                (df_filtered['pharm_clean'] == pharm)
+                (df_filtered['thera_clean'] == thera)
                 ]
 
             if not subset.empty:
@@ -126,7 +136,7 @@ def create_source_to_pharm_sankey(feature_annotation: pd.DataFrame, top_n_pharm:
                 if sample_count > 0:
                     flow_data.append({
                         'source_clean': source,
-                        'pharm_clean': pharm,
+                        'thera_clean': thera,
                         'count': sample_count
                     })
 
@@ -138,7 +148,7 @@ def create_source_to_pharm_sankey(feature_annotation: pd.DataFrame, top_n_pharm:
 
     # Create unique lists of sources and targets
     sources = flow_data['source_clean'].unique().tolist()
-    targets = flow_data['pharm_clean'].unique().tolist()
+    targets = flow_data['thera_clean'].unique().tolist()
 
     # Create node labels and indices
     all_nodes = sources + targets
@@ -146,7 +156,7 @@ def create_source_to_pharm_sankey(feature_annotation: pd.DataFrame, top_n_pharm:
 
     # Create source and target indices for the flows
     source_indices = [node_indices[source] for source in flow_data['source_clean']]
-    target_indices = [node_indices[target] for target in flow_data['pharm_clean']]
+    target_indices = [node_indices[target] for target in flow_data['thera_clean']]
     values = flow_data['count'].tolist()
 
     # Define colors for different chemical sources
@@ -163,14 +173,23 @@ def create_source_to_pharm_sankey(feature_annotation: pd.DataFrame, top_n_pharm:
         'Unknown': 'rgba(23, 190, 207, 0.8)'
     }
 
-    # Assign colors to nodes
+    pharm_colors = generate_colors(len(targets))
+    pharm_color_map = {pharm: pharm_colors[i] for i, pharm in enumerate(targets)}
+
     node_colors = []
     for node in all_nodes:
         if node in sources:
             node_colors.append(source_colors.get(node, 'rgba(128, 128, 128, 0.8)'))
         else:
-            # For pharmacological classes, use a lighter version of blue
-            node_colors.append('rgba(173, 216, 230, 0.8)')
+            node_colors.append(pharm_color_map.get(node, 'rgba(173, 216, 230, 0.8)'))
+    # Assign colors to nodes
+    # node_colors = []
+    # for node in all_nodes:
+    #     if node in sources:
+    #         node_colors.append(source_colors.get(node, 'rgba(128, 128, 128, 0.8)'))
+    #     else:
+    #         # For therapeutic area, use a lighter version of blue
+    #         node_colors.append('rgba(173, 216, 230, 0.8)')
 
     # Create the Sankey diagram
     fig = go.Figure(data=[go.Sankey(
@@ -190,7 +209,7 @@ def create_source_to_pharm_sankey(feature_annotation: pd.DataFrame, top_n_pharm:
     )])
 
     fig.update_layout(
-        title_text=f"Chemical Source to Top {top_n_pharm} Pharmacological Classes<br><sub>Flow width = Number of samples with detections</sub>",
+        title_text=f"Chemical Source to Top {top_n_pharm} Therapeutic Areas<br><sub>Flow width = Number of samples with detections</sub>",
         font_size=14,
         height=600,
         margin=dict(l=40, r=40, t=40, b=40)
@@ -207,7 +226,7 @@ def add_sankey_graph():
     if not st.session_state.get('run_analysis', False):
         return
 
-    st.header("🌊 Chemical Source to Pharmacological Class Flow")
+    st.header("🌊 Chemical Source and Therapeutic area overview")
 
     # Get the feature annotation data from session state
     feature_annotation = st.session_state.get('feature_annotation')
@@ -216,17 +235,17 @@ def add_sankey_graph():
         st.warning("No feature annotation data available. Please run the analysis first.")
         return
 
-    # User input for number of top pharmacological classes
+    # User input for number of top therapeutic area
     col1, col2 = st.columns([1, 3])
 
     with col1:
         top_n_pharm = st.number_input(
-            "Top N Pharmacological Classes",
+            "Top N Therapeutic Areas",
             min_value=5,
             max_value=25,
             value=10,
             step=1,
-            help="Select how many top pharmacological classes to include in the Sankey diagram"
+            help="Select how many top therapeutic areas to include in the Sankey diagram"
         )
 
     with col2:
@@ -235,7 +254,7 @@ def add_sankey_graph():
     # Create and display the Sankey diagram
     with st.spinner("Generating Sankey diagram..."):
         try:
-            fig = create_source_to_pharm_sankey(feature_annotation, top_n_pharm)
+            fig = create_source_to_thera_sankey(feature_annotation, top_n_pharm)
 
             if fig is not None:
                 st.plotly_chart(fig, use_container_width=True)
@@ -244,7 +263,7 @@ def add_sankey_graph():
                 with st.expander("How to interpret this Sankey diagram"):
                     st.write("""
                     - **Left side (Chemical Sources)**: Shows the different sources of detected compounds
-                    - **Right side (Pharmacological Classes)**: Shows the top pharmacological classes found
+                    - **Right side (Therapeutic Area)**: Shows the top therapeutic areas found
                     - **Flow width**: The thickness of each flow represents the **number of samples** where this source-class combination has non-zero detections
                     - **Colors**: Different chemical sources are color-coded for easy identification
 
