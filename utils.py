@@ -1,3 +1,4 @@
+import colorsys
 import os
 from typing import Literal
 
@@ -6,7 +7,6 @@ import plotly.graph_objects as go
 import requests
 import streamlit as st
 
-import colorsys
 
 def generate_colors(n, base_color=(0.55, 0.85, 0.9)):
     # base_color is in HSV, e.g., light blue
@@ -17,6 +17,7 @@ def generate_colors(n, base_color=(0.55, 0.85, 0.9)):
         rgba = f'rgba({int(rgb[0] * 255)}, {int(rgb[1] * 255)}, {int(rgb[2] * 255)}, 0.8)'
         colors.append(rgba)
     return colors
+
 
 @st.cache_data
 def fetch_file(
@@ -51,171 +52,121 @@ def highlight_yes(val):
     return ""
 
 
-def create_source_to_thera_sankey(feature_annotation: pd.DataFrame, top_n_pharm: int = 10):
+def create_sankey_plot(feature_annotation: pd.DataFrame, top_areas: int = 5, top_class: int = 10):
     """
-    Creates a Sankey diagram showing the flow from chemical source to therapeutical area use.
-    The flow values represent the number of samples (columns with "Peak" in name) that have
-    non-zero values for each source-therapeutical area combination.
+    Create a Sankey plot
 
-    :param feature_annotation: DataFrame with feature annotations
-    :param top_n_pharm: Number of top therapeutic area to include
-    :return: Plotly figure object
+    Parameters:
+    feature_annotation (pd.DataFrame): Input dataframe with drug detection data
     """
-    # Prepare the data
-    df = feature_annotation.copy()
 
-    # Get all columns with "Peak" in the name (these are the sample columns)
-    peak_columns = [col for col in df.columns if 'Peak' in col]
+    # Clean the name_parent_compound column (equivalent to str_trim)
+    feature_annotation['name_parent_compound'] = feature_annotation['name_parent_compound'].str.strip()
 
-    if not peak_columns:
-        st.warning("No columns with 'Peak' found in the data.")
-        return None
+    # Select columns containing name_parent_compound and file extensions
+    peak_area_cols = [col for col in feature_annotation.columns if
+                      'name_parent_compound' in col or
+                      '.mzML' in col or
+                      'mzXML' in col]
+    exo_drug_peak_area = feature_annotation[peak_area_cols]
 
-    # Clean up chemical_source - take first value when "|" is present
-    df['source_clean'] = df['chemical_source'].fillna('Unknown').apply(
-        lambda x: x.split('|')[0] if pd.notna(x) and '|' in str(x) else str(x)
-    )
-    df['thera_clean'] = df['therapeutic_area'].fillna('Unknown')
+    # Group by name_parent_compound and sum
+    exo_drug_group = exo_drug_peak_area.groupby('name_parent_compound').sum()
 
-    # Filter out rows where both are Unknown or NA
-    df = df[(df['source_clean'] != 'Unknown') | (df['thera_clean'] != 'Unknown')]
-    df = df[df['thera_clean'] != 'no_match']
+    # Calculate occurrences (rowSums > 0)
+    exo_drug_detection = pd.DataFrame({
+        'occurrence': (exo_drug_group > 0).sum(axis=1)
+    })
+    exo_drug_detection.reset_index(inplace=True)
 
-    # Expand therapeutic_area (handle multiple values separated by |)
-    df_expanded = df.copy()
-    #TODO: Maybe this is not necessary?
-    df_expanded['thera_clean'] = df_expanded['thera_clean'].astype(str).str.split('|')
-    df_expanded = df_expanded.explode('thera_clean')
-    df_expanded = df_expanded[df_expanded['thera_clean'].notna()]
-    df_expanded = df_expanded[df_expanded['thera_clean'] != 'Unknown']
-    df_expanded = df_expanded[df_expanded['thera_clean'] != 'NA']
+    # Join with therapeutic_area and pharmacologic_class
+    merge_cols = ['name_parent_compound', 'therapeutic_area', 'pharmacologic_class']
+    exo_drug_info = feature_annotation[merge_cols].drop_duplicates().groupby('name_parent_compound').first().reset_index()
 
-    if df_expanded.empty:
-        st.warning("No valid data found for Sankey diagram.")
-        return None
+    exo_drug_detection = exo_drug_detection.merge(exo_drug_info, on='name_parent_compound', how='left')
 
-    # Calculate sample counts for each therapeutic area to determine top N
-    thera_sample_counts = {}
-    for therapeutical_use in df_expanded['thera_clean'].unique():
-        thera_data = df_expanded[df_expanded['thera_clean'] == therapeutical_use]
-        # Count samples (columns) where at least one feature of this class has > 0 value
-        sample_count = 0
-        for col in peak_columns:
-            if (thera_data[col] > 0).any():
-                sample_count += 1
-        thera_sample_counts[therapeutical_use] = sample_count
+    # Handle NA values
+    exo_drug_detection = exo_drug_detection.fillna("NA")
+    exo_drug_detection.loc[exo_drug_detection['therapeutic_area'] == "NA", 'therapeutic_area'] = "unspecified_area"
+    exo_drug_detection.loc[
+        exo_drug_detection['pharmacologic_class'] == "NA", 'pharmacologic_class'] = "unspecified_class"
 
-    # Get top N therapeutic area based on sample counts
-    top_thera_use = sorted(thera_sample_counts.items(), key=lambda x: x[1], reverse=True)[:top_n_pharm]
-    top_thera_use = [thera for thera, _ in top_thera_use]
+    # Filter out unspecified/NA entries
+    pattern = r'NA|no_match|unspecified'
+    exo_drug_detection_filtered = exo_drug_detection[
+        (~exo_drug_detection['therapeutic_area'].str.contains(pattern, case=False, na=False)) &
+        (~exo_drug_detection['pharmacologic_class'].str.contains(pattern, case=False, na=False))
+        ]
 
-    # Filter to only include top therapeutic area
-    df_filtered = df_expanded[df_expanded['thera_clean'].isin(top_thera_use)]
+    # First level: therapeutic_area -> pharmacologic_class
+    counts_first = exo_drug_detection_filtered.groupby(['therapeutic_area', 'pharmacologic_class'])[
+        'occurrence'].sum().reset_index()
+    counts_first.columns = ['source', 'target', 'value']
 
-    if df_filtered.empty:
-        st.warning("No data available after filtering for top therapeutic areas.")
-        return None
+    # Get top 5 therapeutic areas by total value
+    top_sources_first = counts_first.groupby('source')['value'].sum().sort_values(ascending=False).head(top_areas)
+    counts_first_top5 = counts_first[counts_first['source'].isin(top_sources_first.index)]
 
-    # Create source-target pairs and count samples with non-zero values
-    flow_data = []
-    for source in df_filtered['source_clean'].unique():
-        for thera in df_filtered['thera_clean'].unique():
-            # Get data for this source-pharm combination
-            subset = df_filtered[
-                (df_filtered['source_clean'] == source) &
-                (df_filtered['thera_clean'] == thera)
-                ]
+    # Second level: pharmacologic_class -> name_parent_compound
+    counts_second = exo_drug_detection_filtered.groupby(['pharmacologic_class', 'name_parent_compound'])[
+        'occurrence'].sum().reset_index()
+    counts_second.columns = ['source', 'target', 'value']
 
-            if not subset.empty:
-                # Count samples where this combination has non-zero values
-                sample_count = 0
-                for col in peak_columns:
-                    if (subset[col] > 0).any():
-                        sample_count += 1
+    # Filter to only include pharmacologic_classes from first level
+    counts_second_filtered = counts_second[counts_second['source'].isin(counts_first_top5['target'])]
 
-                if sample_count > 0:
-                    flow_data.append({
-                        'source_clean': source,
-                        'thera_clean': thera,
-                        'count': sample_count
-                    })
+    # Get top selected pharmacologic classes by total value
+    top_sources_second = counts_second_filtered.groupby('source')['value'].sum().sort_values(ascending=False).head(top_class)
+    counts_second_top10 = counts_second_filtered[counts_second_filtered['source'].isin(top_sources_second.index)]
 
-    flow_data = pd.DataFrame(flow_data)
+    # Combine both levels
+    counts = pd.concat([counts_first_top5, counts_second_top10], ignore_index=True)
 
-    if flow_data.empty:
-        st.warning("No valid flows found for Sankey diagram.")
-        return None
+    # Create links dataframe
+    links = pd.DataFrame({
+        'source': counts['source'],
+        'target': counts['target'],
+        'value': counts['value']
+    })
 
-    # Create unique lists of sources and targets
-    sources = flow_data['source_clean'].unique().tolist()
-    targets = flow_data['thera_clean'].unique().tolist()
+    # Create nodes dataframe
+    all_nodes = pd.concat([links['source'], links['target']]).unique()
+    nodes = pd.DataFrame({'name': all_nodes})
 
-    # Create node labels and indices
-    all_nodes = sources + targets
-    node_indices = {node: i for i, node in enumerate(all_nodes)}
+    # Convert names to indices for Plotly
+    node_dict = {name: i for i, name in enumerate(nodes['name'])}
+    links['source_id'] = links['source'].map(node_dict)
+    links['target_id'] = links['target'].map(node_dict)
 
-    # Create source and target indices for the flows
-    source_indices = [node_indices[source] for source in flow_data['source_clean']]
-    target_indices = [node_indices[target] for target in flow_data['thera_clean']]
-    values = flow_data['count'].tolist()
+    node_colors = generate_colors(top_areas) + generate_colors(top_class) + generate_colors(len(nodes['name']) - top_class + top_areas)
 
-    # Define colors for different chemical sources
-    source_colors = {
-        'Medical': 'rgba(31, 119, 180, 0.8)',
-        'Drug_analog': 'rgba(255, 127, 14, 0.8)',
-        'Food': 'rgba(44, 160, 44, 0.8)',
-        'Endogenous': 'rgba(214, 39, 40, 0.8)',
-        'Drug metabolite': 'rgba(148, 103, 189, 0.8)',
-        'Background/QAQC': 'rgba(140, 86, 75, 0.8)',
-        'Personal Care': 'rgba(227, 119, 194, 0.8)',
-        'Industrial': 'rgba(127, 127, 127, 0.8)',
-        'Low_confidence': 'rgba(188, 189, 34, 0.8)',
-        'Unknown': 'rgba(23, 190, 207, 0.8)'
-    }
-
-    pharm_colors = generate_colors(len(targets))
-    pharm_color_map = {pharm: pharm_colors[i] for i, pharm in enumerate(targets)}
-
-    node_colors = []
-    for node in all_nodes:
-        if node in sources:
-            node_colors.append(source_colors.get(node, 'rgba(128, 128, 128, 0.8)'))
-        else:
-            node_colors.append(pharm_color_map.get(node, 'rgba(173, 216, 230, 0.8)'))
-    # Assign colors to nodes
-    # node_colors = []
-    # for node in all_nodes:
-    #     if node in sources:
-    #         node_colors.append(source_colors.get(node, 'rgba(128, 128, 128, 0.8)'))
-    #     else:
-    #         # For therapeutic area, use a lighter version of blue
-    #         node_colors.append('rgba(173, 216, 230, 0.8)')
-
-    # Create the Sankey diagram
+    # Create Sankey diagram
     fig = go.Figure(data=[go.Sankey(
         node=dict(
-            pad=15,
+            pad=10,
             thickness=20,
             line=dict(color="black", width=0.5),
-            label=all_nodes,
-            color=node_colors
+            label=nodes['name'],
+            color=node_colors,
         ),
         link=dict(
-            source=source_indices,
-            target=target_indices,
-            value=values,
-            color='rgba(128, 128, 128, 0.4)'
+            source=links['source_id'],
+            target=links['target_id'],
+            value=links['value']
         )
     )])
 
     fig.update_layout(
-        title_text=f"Chemical Source to Top {top_n_pharm} Therapeutic Areas<br><sub>Flow width = Number of samples with detections</sub>",
+        title_text="Drug Detection Sankey Diagram",
         font_size=14,
-        height=600,
-        margin=dict(l=40, r=40, t=40, b=40)
+        font_family="Arial",
+        height=1000,
+        font=dict(color="white"),
+        margin=dict(l=40, r=200, t=40, b=40),
     )
 
     return fig
+
 
 
 def add_sankey_graph():
@@ -243,18 +194,25 @@ def add_sankey_graph():
             "Top N Therapeutic Areas",
             min_value=5,
             max_value=25,
-            value=10,
+            value=5,
             step=1,
             help="Select how many top therapeutic areas to include in the Sankey diagram"
         )
 
     with col2:
-        st.write("")  # Empty space for alignment
+        top_n_class = st.number_input(
+            "Top N Pharmacologic Classes",
+            min_value=5,
+            max_value=25,
+            value=10,
+            step=1,
+            help="Select how many top pharmacologic classes to include in the Sankey diagram"
+        )
 
     # Create and display the Sankey diagram
     with st.spinner("Generating Sankey diagram..."):
         try:
-            fig = create_source_to_thera_sankey(feature_annotation, top_n_pharm)
+            fig = create_sankey_plot(feature_annotation, top_areas=top_n_pharm, top_class=top_n_class)
 
             if fig is not None:
                 st.plotly_chart(fig, use_container_width=True)
