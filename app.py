@@ -215,6 +215,7 @@ if st.session_state.run_analysis:
         with st.spinner("Reprocessing data with edited annotations..."):
             # Use the edited feature annotation for reanalysis
             feature_annotation = st.session_state.feature_annotation_edited
+            st.session_state.feature_annotation = feature_annotation
 
             # Perform analysis with edited data
             stratified_df = stratify_by_drug_class(feature_annotation, exclude_analogs=True)

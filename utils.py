@@ -181,17 +181,18 @@ def add_sankey_graph():
 
     # Get the feature annotation data from session state
     feature_annotation = st.session_state.get('feature_annotation')
+    print(feature_annotation)
 
     if feature_annotation is None:
         st.warning("No feature annotation data available. Please run the analysis first.")
         return
 
     # User input for number of top therapeutic area
-    col1, col2 = st.columns([1, 3])
+    col1, col2 = st.columns([1, 1])
 
     with col1:
-        top_n_pharm = st.number_input(
-            "Top N Therapeutic Areas",
+        top_n_areas = st.number_input(
+            "Top Therapeutic Areas to show:",
             min_value=5,
             max_value=25,
             value=5,
@@ -201,7 +202,7 @@ def add_sankey_graph():
 
     with col2:
         top_n_class = st.number_input(
-            "Top N Pharmacologic Classes",
+            "Top Pharmacologic Classes to show:",
             min_value=5,
             max_value=25,
             value=10,
@@ -212,7 +213,7 @@ def add_sankey_graph():
     # Create and display the Sankey diagram
     with st.spinner("Generating Sankey diagram..."):
         try:
-            fig = create_sankey_plot(feature_annotation, top_areas=top_n_pharm, top_class=top_n_class)
+            fig = create_sankey_plot(feature_annotation, top_areas=top_n_areas, top_class=top_n_class)
 
             if fig is not None:
                 st.plotly_chart(fig, use_container_width=True)
@@ -220,18 +221,10 @@ def add_sankey_graph():
                 # Add interpretation help
                 with st.expander("How to interpret this Sankey diagram"):
                     st.write("""
-                    - **Left side (Chemical Sources)**: Shows the different sources of detected compounds
-                    - **Right side (Therapeutic Area)**: Shows the top therapeutic areas found
-                    - **Flow width**: The thickness of each flow represents the **number of samples** where this source-class combination has non-zero detections
-                    - **Colors**: Different chemical sources are color-coded for easy identification
-
-                    **Chemical Source Categories:**
-                    - **Medical**: Pharmaceutical compounds
-                    - **Drug_analog**: Structural analogs of known drugs
-                    - **Food**: Food-derived compounds
-                    - **Endogenous**: Naturally occurring in the body
-                    - **Drug metabolite**: Metabolic products of drugs
-                    - And others as detected in your data
+                    - **Left nodes (Pharmacological Areas)**: Shows the different sources of detected compounds
+                    - **Center nodes (Therapeutic Area)**: Shows the therapeutic areas
+                    - **Right nodes (Compound name)**: Shows the compound names
+                    - **Flow width**: The thickness of each flow represents the **number counts** for the connecting nodes
                     """)
 
             else:
