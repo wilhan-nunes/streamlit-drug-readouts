@@ -162,7 +162,7 @@ def create_sankey_plot(feature_annotation: pd.DataFrame, top_areas: int = 5, top
         font_family="Arial",
         height=1000,
         font=dict(color="white"),
-        margin=dict(l=40, r=200, t=40, b=40),
+        margin=dict(l=40, r=40, t=40, b=40),
     )
 
     return fig

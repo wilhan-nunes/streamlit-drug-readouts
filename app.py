@@ -119,68 +119,68 @@ else:
 if st.session_state.run_analysis:
     # Summary Statistics Section
     st.header("📊 Drug Detection Summary Statistics")
+    with st.spinner("Caclulating summary..."):
+        stratified_df = st.session_state.get("stratified_df", None)
+        sample_count = len(stratified_df)
 
-    stratified_df = st.session_state.get("stratified_df", None)
-    sample_count = len(stratified_df)
+        # Define specific drug categories to highlight
+        specific_categories = {
+            "antibiotics": "🦠 Antibiotics",
+            "antidepressants": "🧠 Antidepressants",
+            "statin": "💊 Statins",
+            "PPI": "➕ PPIs (Proton Pump Inhibitors)",
+            "antihistamine": "🤧 Antihistamines",
+            "antihypertensive": "❤️ Antihypertensives",
+            "Alzheimer": "🧠 Alzheimer's Meds",
+            "antifungal": "🍄 Antifungals",
+            "HIVmed": "🏥 HIV Medications"
+        }
 
-    # Define specific drug categories to highlight
-    specific_categories = {
-        "antibiotics": "🦠 Antibiotics",
-        "antidepressants": "🧠 Antidepressants",
-        "statin": "💊 Statins",
-        "PPI": "➕ PPIs (Proton Pump Inhibitors)",
-        "antihistamine": "🤧 Antihistamines",
-        "antihypertensive": "❤️ Antihypertensives",
-        "Alzheimer": "🧠 Alzheimer's Meds",
-        "antifungal": "🍄 Antifungals",
-        "HIVmed": "🏥 HIV Medications"
-    }
+        # Calculate counts and percentages for specific categories
+        category_stats = {}
+        for col_name, display_name in specific_categories.items():
+            if col_name in stratified_df.columns:
+                count = (stratified_df[col_name] == "Yes").sum()
+                pct = (count / sample_count) * 100 if sample_count > 0 else 0
+                category_stats[display_name] = {"count": count, "percentage": pct}
+                #sort
 
-    # Calculate counts and percentages for specific categories
-    category_stats = {}
-    for col_name, display_name in specific_categories.items():
-        if col_name in stratified_df.columns:
-            count = (stratified_df[col_name] == "Yes").sum()
-            pct = (count / sample_count) * 100 if sample_count > 0 else 0
-            category_stats[display_name] = {"count": count, "percentage": pct}
-            #sort
+        # Display specific drug categories in a grid
+        if category_stats:
+            st.subheader("🎯 Specific Drug Categories")
 
-    # Display specific drug categories in a grid
-    if category_stats:
-        st.subheader("🎯 Specific Drug Categories")
+            # Create columns dynamically based on number of categories
+            num_categories = len(category_stats)
+            cols_per_row = 3
 
-        # Create columns dynamically based on number of categories
-        num_categories = len(category_stats)
-        cols_per_row = 3
+            for i in range(0, num_categories, cols_per_row):
+                cols = st.columns(min(cols_per_row, num_categories - i))
 
-        for i in range(0, num_categories, cols_per_row):
-            cols = st.columns(min(cols_per_row, num_categories - i))
+                for j, (display_name, stats) in enumerate(list(category_stats.items())[i:i + cols_per_row]):
+                    with cols[j]:
+                        st.metric(
+                            display_name,
+                            f"{stats['count']} ({stats['percentage']:.1f}%)",
+                            help=f"Number of samples containing {display_name.split(' ', 1)[1].lower()}"
+                        )
 
-            for j, (display_name, stats) in enumerate(list(category_stats.items())[i:i + cols_per_row]):
-                with cols[j]:
-                    st.metric(
-                        display_name,
-                        f"{stats['count']} ({stats['percentage']:.1f}%)",
-                        help=f"Number of samples containing {display_name.split(' ', 1)[1].lower()}"
-                    )
+        # Overall summary metrics
+        st.subheader("📈 Overall Summary")
+        col1, col2, col3 = st.columns(3)
 
-    # Overall summary metrics
-    st.subheader("📈 Overall Summary")
-    col1, col2, col3 = st.columns(3)
+        with col1:
+            total_drug_columns = len([col for col in stratified_df.columns if col != "Sample"])
+            st.metric("Total Drug Categories", total_drug_columns)
 
-    with col1:
-        total_drug_columns = len([col for col in stratified_df.columns if col != "Sample"])
-        st.metric("Total Drug Categories", total_drug_columns)
+        with col2:
+            # Calculate samples with any drug detection
+            drug_columns = [col for col in stratified_df.columns if col != "Sample"]
+            samples_with_drugs = (stratified_df[drug_columns] == "Yes").any(axis=1).sum()
+            drug_detection_pct = (samples_with_drugs / sample_count) * 100 if sample_count > 0 else 0
+            st.metric("Samples with Any Drug", f"{samples_with_drugs} ({drug_detection_pct:.1f}%)")
 
-    with col2:
-        # Calculate samples with any drug detection
-        drug_columns = [col for col in stratified_df.columns if col != "Sample"]
-        samples_with_drugs = (stratified_df[drug_columns] == "Yes").any(axis=1).sum()
-        drug_detection_pct = (samples_with_drugs / sample_count) * 100 if sample_count > 0 else 0
-        st.metric("Samples with Any Drug", f"{samples_with_drugs} ({drug_detection_pct:.1f}%)")
-
-    with col3:
-        st.metric("Total Samples", sample_count)
+        with col3:
+            st.metric("Total Samples", sample_count)
 
     st.divider()
 
@@ -237,19 +237,19 @@ if st.session_state.run_analysis:
 
     # Drug Detection Tables Section
     st.header("🧪 Drug Detection Tables")
+    with st.spinner("Processing..."):
+        stratified_df = st.session_state.get("stratified_df")
+        stratified_df_analogs = st.session_state.get("stratified_df_analogs")
 
-    stratified_df = st.session_state.get("stratified_df")
-    stratified_df_analogs = st.session_state.get("stratified_df_analogs")
+        # optional: clean up sample names
+        stratified_df['Sample'] = stratified_df['Sample'].str.replace(r'\.mz[XM]L Peak area', '', regex=True)
+        stratified_df_analogs['Sample'] = stratified_df_analogs['Sample'].str.replace(r'\.mz[XM]L Peak area', '', regex=True)
 
-    # optional: clean up sample names
-    stratified_df['Sample'] = stratified_df['Sample'].str.replace(r'\.mz[XM]L Peak area', '', regex=True)
-    stratified_df_analogs['Sample'] = stratified_df_analogs['Sample'].str.replace(r'\.mz[XM]L Peak area', '', regex=True)
+        st.subheader("Excluding Drug Analogs")
+        st.dataframe(stratified_df.style.map(highlight_yes), use_container_width=True)
 
-    st.subheader("Excluding Analogs")
-    st.dataframe(stratified_df.style.map(highlight_yes), use_container_width=True)
-
-    with st.expander("Show results including analogs"):
-        st.dataframe(stratified_df_analogs.style.map(highlight_yes), use_container_width=True)
+        with st.expander("Show results including drug analogs"):
+            st.dataframe(stratified_df_analogs.style.map(highlight_yes), use_container_width=True)
 
     st.divider()
 
@@ -356,5 +356,5 @@ if st.session_state.run_analysis:
         use_container_width=True
     )
 
-
-    add_sankey_graph()
+    with st.spinner("Generating Sankey plot..."):
+        add_sankey_graph()
