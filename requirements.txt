@@ -3,3 +3,4 @@ streamlit
 requests
 matplotlib
 upsetplot
+plotly
