@@ -13,7 +13,7 @@ st.set_page_config(page_title=page_title, layout="wide", page_icon=":pill:", men
 
 # Add a tracking token
 #TODO: Add token
-html('<script async defer data-website-id="<your_website_id>" src="https://analytics.gnps2.org/umami.js"></script>', width=0, height=0)
+html('<script async defer data-website-id="74bc9983-13c4-4da0-89ae-b78209c13aaf" src="https://analytics.gnps2.org/umami.js"></script>', width=0, height=0)
 
 if "run_analysis" not in st.session_state:
     st.session_state.run_analysis = False
