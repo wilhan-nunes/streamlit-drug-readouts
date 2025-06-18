@@ -1,0 +1,5 @@
+version: '3'
+services:
+  streamlit-drug-redouts:
+    ports:
+    - "5000:5000"

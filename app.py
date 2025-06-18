@@ -1,9 +1,19 @@
 import uuid  # Added for generating unique identifiers
 
+from streamlit.components.v1 import html
 import streamlit as st
 
-# Set wide mode as default
-st.set_page_config(layout="wide")
+# Set page configuration
+page_title = "Drug Readout Analysis"
+
+#TODO: Bump version
+app_version = "2025-06-18"
+
+st.set_page_config(page_title=page_title, layout="wide", page_icon=":pill:", menu_items={"About": ("**App version: %s**" % app_version)})
+
+# Add a tracking token
+#TODO: Add token
+html('<script async defer data-website-id="<your_website_id>" src="https://analytics.gnps2.org/umami.js"></script>', width=0, height=0)
 
 if "run_analysis" not in st.session_state:
     st.session_state.run_analysis = False
