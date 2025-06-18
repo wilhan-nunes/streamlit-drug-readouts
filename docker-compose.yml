@@ -23,9 +23,9 @@ services:
         limits:
           memory: 8000M
     environment:
-      VIRTUAL_HOST: drugredouts.gnps2.org
+      VIRTUAL_HOST: drugreadouts.gnps2.org
       VIRTUAL_PORT: 5000
-      LETSENCRYPT_HOST: drugredouts.gnps2.org
+      LETSENCRYPT_HOST: drugreadouts.gnps2.org
       LETSENCRYPT_EMAIL: mwang87@gmail.com
 
 networks:
