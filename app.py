@@ -12,7 +12,6 @@ app_version = "2025-06-18"
 st.set_page_config(page_title=page_title, layout="wide", page_icon=":pill:", menu_items={"About": ("**App version: %s**" % app_version)})
 
 # Add a tracking token
-#TODO: Add token
 html('<script async defer data-website-id="74bc9983-13c4-4da0-89ae-b78209c13aaf" src="https://analytics.gnps2.org/umami.js"></script>', width=0, height=0)
 
 if "run_analysis" not in st.session_state:
@@ -267,7 +266,7 @@ if st.session_state.run_analysis:
     # Drug Class Summary Section
 
     import matplotlib.pyplot as plt
-    from upsetplot import plot, from_indicators
+    from upsetplot import UpSet, from_indicators
 
     # Drug Class Summary Section
     st.header("📈 Drug Class Summary")
@@ -314,32 +313,43 @@ if st.session_state.run_analysis:
                 # Create UpSet plot data
                 upset_data = from_indicators(top_classes, limited_matrix.astype(bool))
 
-                # Create the plot
-                fig = plt.figure(figsize=(12, 8))
-                plot(upset_data,
-                     subset_size='count',
-                     show_counts=True,
-                     fig=fig,
-                     sort_by='cardinality',
-                     element_size=40)
 
-                plt.suptitle(f'Drug Class Co-occurrence Analysis\n({len(limited_matrix)} samples, {len(top_classes)} drug classes)',
-                            fontsize=14, y=0.98)
+                upset_fig, ax = plt.subplots(figsize=(10, 6))
+                ax.set_axis_off()
+                UpSet(upset_data, subset_size='count', sort_by='cardinality', show_counts=True).plot(upset_fig)
+                upset_fig.suptitle(f"UpSet Plot for top {n_top_classes} classes and top {max_samples} samples", y=1.05)
+                for ax_ in upset_fig.axes:
+                    ax_.grid(axis='x', visible=False)
 
-                st.pyplot(fig)
+                # Convert the figure to SVG and return as a string
+                import io
 
-                # Add interpretation help
-                with st.expander("How to interpret this UpSet plot"):
-                    st.write("""
-                    - **Horizontal bars (left)**: Show the total number of samples containing each individual drug class
-                    - **Vertical bars (bottom)**: Show the number of samples with each specific combination of drug classes
-                    - **Connected dots**: Indicate which drug classes are part of each combination
-                    - **Larger vertical bars**: Represent more common co-occurrence patterns
-                    - **Single dots**: Show samples with only one drug class detected
-                    - **Multiple connected dots**: Show samples with multiple drug classes detected together
-                    """)
+                buf = io.StringIO()
+                upset_fig.savefig(buf, format='svg', bbox_inches='tight')
+                svg = buf.getvalue()
+                buf.close()
+                plt.close(upset_fig)
 
-                plt.close()  # Clean up the figure
+                _, upset_col, _ = st.columns([1, 6, 1])
+                with upset_col:
+                    st.image(svg, use_container_width=False)
+                    st.download_button(
+                        label=":material/download: Download as SVG",
+                        data=svg,
+                        file_name="upset_plot.svg",
+                        mime="image/svg+xml",
+                        key='upset_plot_download'
+                    )
+                    # Add interpretation help
+                    with st.expander("How to interpret this UpSet plot"):
+                        st.write("""
+                        - **Horizontal bars (left)**: Show the total number of samples containing each individual drug class
+                        - **Vertical bars (bottom)**: Show the number of samples with each specific combination of drug classes
+                        - **Connected dots**: Indicate which drug classes are part of each combination
+                        - **Larger vertical bars**: Represent more common co-occurrence patterns
+                        - **Single dots**: Show samples with only one drug class detected
+                        - **Multiple connected dots**: Show samples with multiple drug classes detected together
+                        """)
 
         except Exception as e:
             st.error(f"Error creating UpSet plot: {str(e)}")
