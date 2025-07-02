@@ -251,7 +251,7 @@ def add_sankey_graph():
     with col1:
         top_n_areas = st.number_input(
             "Top Therapeutic Areas to show:",
-            min_value=5,
+            min_value=1,
             max_value=25,
             value=5,
             step=1,
@@ -261,7 +261,7 @@ def add_sankey_graph():
     with col2:
         top_n_class = st.number_input(
             "Top Pharmacologic Classes to show:",
-            min_value=5,
+            min_value=1,
             max_value=25,
             value=10,
             step=1,
@@ -277,6 +277,14 @@ def add_sankey_graph():
 
             if fig is not None:
                 st.plotly_chart(fig, use_container_width=True)
+                svg_bytes = fig.to_image(format="svg")
+                st.download_button(
+                    label=":material/download: Download Plot as SVG",
+                    data=svg_bytes,
+                    file_name=f"sankey_plot.svg",
+                    mime="image/svg+xml",  # Set the MIME type to SVG
+                    key='sankey_plot_download'
+                )
 
                 # Add interpretation help
                 with st.expander("How to interpret this Sankey diagram"):
