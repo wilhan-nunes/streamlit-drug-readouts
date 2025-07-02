@@ -1,18 +1,28 @@
-import uuid  # Added for generating unique identifiers
-
+from gnpsdata import workflow_fbmn
 from streamlit.components.v1 import html
 import streamlit as st
+
 
 # Set page configuration
 page_title = "Drug Readout Analysis"
 
-#TODO: Bump version
+# TODO: Bump version
 app_version = "2025-06-18"
 
-st.set_page_config(page_title=page_title, layout="wide", page_icon=":pill:", menu_items={"About": ("**App version: %s**" % app_version)})
+st.set_page_config(
+    page_title=page_title,
+    layout="wide",
+    page_icon=":pill:",
+    menu_items={"About": ("**App version: %s**" % app_version)},
+)
+
 
 # Add a tracking token
-html('<script async defer data-website-id="74bc9983-13c4-4da0-89ae-b78209c13aaf" src="https://analytics.gnps2.org/umami.js"></script>', width=0, height=0)
+html(
+    '<script async defer data-website-id="74bc9983-13c4-4da0-89ae-b78209c13aaf" src="https://analytics.gnps2.org/umami.js"></script>',
+    width=0,
+    height=0,
+)
 
 if "run_analysis" not in st.session_state:
     st.session_state.run_analysis = False
@@ -30,84 +40,122 @@ st.title("Drug Readout Analysis")
 
 # defining query params to populate input fields
 query_params = st.query_params
-gnps_task_id = query_params.get('taskid', '')
-threshold = query_params.get('threshold', 100)
-blank_str = query_params.get('blank_ids', None)
+gnps_task_id = query_params.get("taskid", "")
+threshold = query_params.get("threshold", 100)
+blank_str = query_params.get("blank_ids", None)
 
 # Sidebar inputs
 with st.sidebar:
     st.header("Inputs")
-
-    task_id = st.text_input(f"{BADGE_TASK_ID_} FBMN Workflow Task ID (GNPS2)",
-                            help="Enter the Task ID from a FBMN Workflow to retrieve the result files.",
-                            placeholder='enter task ID...',
-                            value=gnps_task_id)
+    task_id = st.text_input(
+        f"{BADGE_TASK_ID_} FBMN Workflow Task ID (GNPS2)",
+        help="Enter the Task ID from a FBMN Workflow to retrieve the result files.",
+        placeholder="enter task ID...",
+        value=gnps_task_id,
+    )
     # slider to set threshold for the number of features
-    intensity_thresh = st.number_input("Peak Area Threshold", min_value=100, max_value=50000, value=int(threshold),
-                                       step=100,
-                                       help="Only detections with peak area above this number will be considered.")
+    intensity_thresh = st.number_input(
+        "Peak Area Threshold",
+        min_value=100,
+        max_value=50000,
+        value=int(threshold),
+        step=100,
+        help="Only detections with peak area above this number will be considered.",
+    )
 
-    blank_ids = st.text_input("Blank IDs (optional)", value=blank_str, placeholder="Example: BLANK|IS|PoolQC|QCmix|SRM",
-                              help="Enter substrings to identify blank or control columns, separated by '|'. If given, the table will be filtered to remove these columns from the analysis. If not provided, all columns will be considered.")
+    blank_ids = st.text_input(
+        "Blank IDs (optional)",
+        value=blank_str,
+        placeholder="Example: BLANK|IS|PoolQC|QCmix|SRM",
+        help="Enter substrings to identify blank or control columns, separated by '|'. If given, the table will be filtered to remove these columns from the analysis. If not provided, all columns will be considered.",
+    )
 
     if not task_id:
-        st.warning(f"Please enter a {BADGE_TASK_ID_} from a FBMN Workflow to proceed.", )
+        st.warning(
+            f"Please enter a {BADGE_TASK_ID_} from a FBMN Workflow to proceed.",
+        )
 
-    run_analysis = st.button("Run Analysis", icon="🏁", help="Click to start the analysis with the provided inputs.",
-                             use_container_width=True, key="run_analysis_button")
+    if st.button(
+        "Run Analysis",
+        icon="🏁",
+        help="Click to start the analysis with the provided inputs.",
+        use_container_width=True,
+        key="run_analysis_button",
+        disabled=not task_id
+    ):
+        st.session_state.run_analysis = True
 
-    if st.button('Restart Session', icon="♻️" ,key='restart_session', use_container_width=True, type='primary'):
+    if st.button(
+        "Restart Session",
+        icon="♻️",
+        key="restart_session",
+        use_container_width=True,
+        type="primary",
+    ):
         # Reset the session state
         st.session_state.clear()
         st.rerun()
-
 # Process files when task ID and sample feature table are provided
-if run_analysis:
-    try:
-        # Generate a unique identifier using uuid
-        unique_id = uuid.uuid4().hex
+if st.session_state.get('run_analysis_button', False) or st.session_state.get("rerun_analysis", False):
 
+    try:
         # Retrieve lib_search using the task ID
         with st.spinner("Downloading Task result files..."):
-            quant_file_path = fetch_file(task_id, f"quant_table_{unique_id}.csv", type="quant_table")
-            st.markdown(
-                f":white_check_mark: Quant table ({task_id}) [Download](https://gnps2.org/result?task={task_id}&viewname=quantificationdownload&resultdisplay_type=task)",
-                unsafe_allow_html=True)
-            annotation_file_path = fetch_file(
-                task_id, f"annotations_{unique_id}.tsv", type="annotation_table"
-            )
-            st.markdown(
-                f":white_check_mark: Annotation table ({task_id}) [Download](https://gnps2.org/resultfile?task={task_id}&file=nf_output/library/merged_results_with_gnps.tsv)")
+            quant_file_df = workflow_fbmn.get_quantification_dataframe(task_id, gnps2=True)
+            annotation_file_df =  workflow_fbmn.get_library_match_dataframe(task_id, gnps2=True)
 
-            drug_metadata_file = "data/GNPS_Drug_Library_Metadata_Drugs.csv"
-            analog_metadata_file = "data/GNPS_Drug_Library_Metadata_Drug_Analogs_Updated.csv"
+            DRUG_METADATA_FILE = "data/GNPS_Drug_Library_Metadata_Drugs.csv"
+            ANALOG_METADATA_FILE = (
+                "data/GNPS_Drug_Library_Metadata_Drug_Analogs_Updated.csv"
+            )
+
+
+            st.markdown(
+                f"[:material/download: Input Quant table]"
+                f"(https://gnps2.org/result?task={task_id}&viewname=quantificationdownload&resultdisplay_type=task) | "
+                f"[:material/download: Input Annotation table]"
+                f"(https://gnps2.org/resultfile?task={task_id}&file=nf_output/library/merged_results_with_gnps.tsv)",
+            )
+
 
         # Process data
         with st.spinner("Processing data..."):
             subtract_blanks = True if blank_ids else False
-            feature_filtered = load_and_filter_features(quant_file_path, intensity_threshold=intensity_thresh,
-                                                        blank_ids=blank_ids, subtract_blanks=subtract_blanks)
-
-            annotation_metadata = load_and_merge_annotations(
-                annotation_file_path, drug_metadata_file, analog_metadata_file
+            feature_filtered = load_and_filter_features(
+                quant_file_df,
+                intensity_threshold=intensity_thresh,
+                blank_ids=blank_ids,
+                subtract_blanks=subtract_blanks,
             )
 
-            if "feature_annotation_edited" in st.session_state:
-                # If the user has edited the feature annotation, use that instead of the original
-                feature_annotation = st.session_state.feature_annotation_edited
-            else:
+            annotation_metadata = load_and_merge_annotations(
+                annotation_file_df, DRUG_METADATA_FILE, ANALOG_METADATA_FILE
+            )
+            if not st.session_state.get("rerun_analysis", False):
                 feature_annotation = generate_feature_annotation(
                     annotation_metadata, feature_filtered
                 )
+            else:
+                feature_annotation = st.session_state.get('feature_annotation_edited')
+                st.success(f'Feature annotation get from session state. Shape: {feature_annotation.shape}')
+                st.session_state["rerun_analysis"] = False
 
             # Perform analysis
-            stratified_df = stratify_by_drug_class(feature_annotation, exclude_analogs=True)
-            stratified_df_analogs = stratify_by_drug_class(feature_annotation, exclude_analogs=False)
+            stratified_df = stratify_by_drug_class(
+                feature_annotation, exclude_analogs=True
+            )
+            stratified_df_analogs = stratify_by_drug_class(
+                feature_annotation, exclude_analogs=False
+            )
 
             # Counting drug class occurrence per sample
-            class_count_df = count_drug_class_occurrences(feature_annotation, class_column="pharmacologic_class")
+            class_count_df = count_drug_class_occurrences(
+                feature_annotation, class_column="pharmacologic_class"
+            )
             class_count_df["total_matches"] = class_count_df.sum(axis=1)
-            class_count_df_sorted = class_count_df.sort_values("total_matches", ascending=False)
+            class_count_df_sorted = class_count_df.sort_values(
+                "total_matches", ascending=False
+            )
 
             # store all dataframes in session state
             st.session_state.feature_annotation = feature_annotation
@@ -115,20 +163,18 @@ if run_analysis:
             st.session_state.stratified_df_analogs = stratified_df_analogs
             st.session_state.class_count_df_sorted = class_count_df_sorted
 
-            st.session_state.run_analysis = True
 
     except Exception as e:
         st.error(f"An error occurred: {e}")
         # raise
 else:
-    st.info(
-        ":information_source: Please, provide the inputs, then click Run Analysis.")
+    st.info(":information_source: Please, provide the inputs, then click Run Analysis.")
 
 # Display results if analysis has been run
 if st.session_state.run_analysis:
     # Summary Statistics Section
     st.header("📊 Drug Detection Summary Statistics")
-    with st.spinner("Caclulating summary..."):
+    with st.spinner("Calculating summary..."):
         stratified_df = st.session_state.get("stratified_df", None)
         sample_count = len(stratified_df)
 
@@ -142,7 +188,7 @@ if st.session_state.run_analysis:
             "antihypertensive": "❤️ Antihypertensives",
             "Alzheimer": "🧠 Alzheimer's Meds",
             "antifungal": "🍄 Antifungals",
-            "HIVmed": "🏥 HIV Medications"
+            "HIVmed": "🏥 HIV Medications",
         }
 
         # Calculate counts and percentages for specific categories
@@ -152,7 +198,7 @@ if st.session_state.run_analysis:
                 count = (stratified_df[col_name] == "Yes").sum()
                 pct = (count / sample_count) * 100 if sample_count > 0 else 0
                 category_stats[display_name] = {"count": count, "percentage": pct}
-                #sort
+                # sort
 
         # Display specific drug categories in a grid
         if category_stats:
@@ -165,12 +211,14 @@ if st.session_state.run_analysis:
             for i in range(0, num_categories, cols_per_row):
                 cols = st.columns(min(cols_per_row, num_categories - i))
 
-                for j, (display_name, stats) in enumerate(list(category_stats.items())[i:i + cols_per_row]):
+                for j, (display_name, stats) in enumerate(
+                    list(category_stats.items())[i : i + cols_per_row]
+                ):
                     with cols[j]:
                         st.metric(
                             display_name,
                             f"{stats['count']} ({stats['percentage']:.1f}%)",
-                            help=f"Number of samples containing {display_name.split(' ', 1)[1].lower()}"
+                            help=f"Number of samples containing {display_name.split(' ', 1)[1].lower()}",
                         )
 
         # Overall summary metrics
@@ -178,15 +226,24 @@ if st.session_state.run_analysis:
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            total_drug_columns = len([col for col in stratified_df.columns if col != "Sample"])
+            total_drug_columns = len(
+                [col for col in stratified_df.columns if col != "Sample"]
+            )
             st.metric("Total Drug Categories", total_drug_columns)
 
         with col2:
             # Calculate samples with any drug detection
             drug_columns = [col for col in stratified_df.columns if col != "Sample"]
-            samples_with_drugs = (stratified_df[drug_columns] == "Yes").any(axis=1).sum()
-            drug_detection_pct = (samples_with_drugs / sample_count) * 100 if sample_count > 0 else 0
-            st.metric("Samples with Any Drug", f"{samples_with_drugs} ({drug_detection_pct:.1f}%)")
+            samples_with_drugs = (
+                (stratified_df[drug_columns] == "Yes").any(axis=1).sum()
+            )
+            drug_detection_pct = (
+                (samples_with_drugs / sample_count) * 100 if sample_count > 0 else 0
+            )
+            st.metric(
+                "Samples with Any Drug",
+                f"{samples_with_drugs} ({drug_detection_pct:.1f}%)",
+            )
 
         with col3:
             st.metric("Total Samples", sample_count)
@@ -195,52 +252,95 @@ if st.session_state.run_analysis:
 
     # Feature Annotation Table Section
     st.header("🔬 Feature Annotation Table")
-    st.write('You can edit the table below and then rerun the analysis with your modifications. [Learn how](https://www.youtube.com/watch?v=6tah69LkfxE&list=TLGGKK4Dnf1gepcwNTA2MjAyNQ)')
-
-    # Store the original dataframe in session state if not already there
-    if "feature_annotation_edited" not in st.session_state:
-        st.session_state.feature_annotation_edited = st.session_state.feature_annotation.copy()
-
-    # Use data_editor to allow editing and preserve changes
-    edited_df = st.data_editor(
-        st.session_state.feature_annotation_edited,
-        key="feature_annotation_editor",
-        use_container_width=True,
-        num_rows="dynamic",
-        height=400
+    st.write(
+        "You can edit the table below and then rerun the analysis with your modifications. "
+        "[Learn how](https://www.youtube.com/watch?v=6tah69LkfxE&list=TLGGKK4Dnf1gepcwNTA2MjAyNQ)"
     )
+    st.write("*The **filters must be cleared** to allow data editing. "
+             "Filters show results for the original (not edited) table")
 
-    # Update session state with edits
-    st.session_state.feature_annotation_edited = edited_df
+    # Simple filter option to select column and value to search (side by side)
+    col_filter, col_value = st.columns(2)
+    with col_filter:
+        filter_col = st.selectbox(
+            "Filter by column", st.session_state.feature_annotation.columns, key="filter_col"
+        )
+        unique_values = st.session_state.feature_annotation[filter_col].unique()
+    with col_value:
+        filter_val = st.text_input(
+            "Select value to filter", key="filter_val"
+        )
+
+
+    if filter_val:
+        filtered_df = st.session_state.feature_annotation[
+            st.session_state.feature_annotation[filter_col].str.contains(filter_val, case=False, na=False)
+            ]
+        edited_df = st.dataframe(
+            filtered_df,
+            key="feature_annotation_editor",
+            use_container_width=True,
+            height=400,
+        )
+    else:
+        # Use data_editor to allow editing and preserve changes
+        edited_df = st.data_editor(
+            st.session_state.feature_annotation,
+            key="feature_annotation_editor",
+            use_container_width=True,
+            num_rows="dynamic",
+            height=400,
+        )
 
     # Rerun button
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        rerun_button = st.button("🔄 Rerun Analysis with Edited Data",
-                                 use_container_width=True,
-                                 type="primary")
+        if st.button(
+            "🔄 Rerun Analysis with Edited Data",
+            use_container_width=True,
+            type="primary",
+            key="rerun_analysis_button",
+        ):
+            st.session_state['rerun_analysis'] = True
 
-    if rerun_button:
+
+    if st.session_state.get('rerun_analysis', False):
+        rows_to_remove = st.session_state.feature_annotation_editor.get("deleted_rows", [])
+        rows_to_edit = st.session_state.feature_annotation_editor.get("edited_rows", {})
+        rows_to_add = st.session_state.feature_annotation_editor.get("added_rows", [])
+
         with st.spinner("Reprocessing data with edited annotations..."):
             # Use the edited feature annotation for reanalysis
-            feature_annotation = st.session_state.feature_annotation_edited
-            st.session_state.feature_annotation = feature_annotation
+            if "feature_annotation_editor" in st.session_state:
+                st.write("using edited feature annotation")
+                if not st.session_state.get('feature_annotation_editor'):
+                    print('Editor empty')
+                # If the user has edited the feature annotation, use that instead of the original
+            else:
+                st.write("using original feature annotation")
 
-            # Perform analysis with edited data
-            stratified_df = stratify_by_drug_class(feature_annotation, exclude_analogs=True)
-            stratified_df_analogs = stratify_by_drug_class(feature_annotation, exclude_analogs=False)
+            feature_annotation = st.session_state.feature_annotation
 
-            # Counting drug class occurrence per sample
-            class_count_df = count_drug_class_occurrences(feature_annotation, class_column="pharmacologic_class")
-            class_count_df["total_matches"] = class_count_df.sum(axis=1)
-            class_count_df_sorted = class_count_df.sort_values("total_matches", ascending=False)
+            feature_annotation_edited = feature_annotation.copy()
 
-            # Update session state with new results
-            st.session_state.stratified_df = stratified_df
-            st.session_state.stratified_df_analogs = stratified_df_analogs
-            st.session_state.class_count_df_sorted = class_count_df_sorted
+            # Remove rows safely
+            if rows_to_remove:
+                feature_annotation_edited = feature_annotation_edited.drop(rows_to_remove, errors="ignore")
 
-            st.success("Analysis updated with edited data!")
+            # Edit rows
+            for index, values_dict in rows_to_edit.items():
+                for col, value in values_dict.items():
+                    feature_annotation_edited.at[index, col] = value
+
+            # Add new rows if any
+            if rows_to_add:
+                import pandas as pd
+                feature_annotation_edited = pd.concat(
+                    [feature_annotation_edited, pd.DataFrame(rows_to_add)], ignore_index=True
+                )
+
+            st.session_state.feature_annotation_edited = feature_annotation_edited
+
             st.rerun()
 
     st.divider()
@@ -252,14 +352,20 @@ if st.session_state.run_analysis:
         stratified_df_analogs = st.session_state.get("stratified_df_analogs")
 
         # optional: clean up sample names
-        stratified_df['Sample'] = stratified_df['Sample'].str.replace(r'\.mz[XM]L Peak area', '', regex=True)
-        stratified_df_analogs['Sample'] = stratified_df_analogs['Sample'].str.replace(r'\.mz[XM]L Peak area', '', regex=True)
+        stratified_df["Sample"] = stratified_df["Sample"].str.replace(
+            r"\.mz[XM]L Peak area", "", regex=True
+        )
+        stratified_df_analogs["Sample"] = stratified_df_analogs["Sample"].str.replace(
+            r"\.mz[XM]L Peak area", "", regex=True
+        )
 
         st.subheader("Excluding Drug Analogs")
         st.dataframe(stratified_df.style.map(highlight_yes), use_container_width=True)
 
         with st.expander("Show results including drug analogs"):
-            st.dataframe(stratified_df_analogs.style.map(highlight_yes), use_container_width=True)
+            st.dataframe(
+                stratified_df_analogs.style.map(highlight_yes), use_container_width=True
+            )
 
     st.divider()
 
@@ -274,28 +380,45 @@ if st.session_state.run_analysis:
     class_count_df_sorted = st.session_state.get("class_count_df_sorted")
 
     # Create tabs for different visualizations
-    tab_plot, tab_table = st.tabs(["🔀 UpSet Plot", "📊 Top Classes Table", ])
+    tab_plot, tab_table = st.tabs(
+        [
+            "🔀 UpSet Plot",
+            "📊 Top Classes Table",
+        ]
+    )
 
     with tab_plot:
         st.subheader("Drug Class Co-occurrence Analysis")
-        st.write("This UpSet plot shows how different drug classes co-occur across samples. Each bar represents a unique combination of drug classes.")
+        st.write(
+            "This UpSet plot shows how different drug classes co-occur across samples. Each bar represents a unique combination of drug classes."
+        )
 
         # Controls for UpSet plot
         col1, col2 = st.columns(2)
         with col1:
-            n_top_classes = st.number_input("Number of Top Classes for UpSet Plot",
-                                           min_value=1, value=4,
-                                           key="upset_classes_input",
-                                           help="Select how many top drug classes to include in the UpSet plot")
+            n_top_classes = st.number_input(
+                "Number of Top Classes for UpSet Plot",
+                min_value=1,
+                value=4,
+                key="upset_classes_input",
+                help="Select how many top drug classes to include in the UpSet plot",
+            )
         with col2:
-            max_samples = st.number_input("Maximum Samples to Include",
-                                         min_value=1, value=50,
-                                         key="upset_samples_input",
-                                         help="Limit the number of samples to avoid overcrowding")
+            max_samples = st.number_input(
+                "Maximum Samples to Include",
+                min_value=1,
+                value=50,
+                key="upset_samples_input",
+                help="Limit the number of samples to avoid overcrowding",
+            )
 
         try:
             # Prepare binary matrix for top classes
-            top_classes = class_count_df_sorted.sum(axis=0).nlargest(n_top_classes+1).index.tolist()
+            top_classes = (
+                class_count_df_sorted.sum(axis=0)
+                .nlargest(n_top_classes + 1)
+                .index.tolist()
+            )
             top_classes.remove("total_matches")
             # Create binary matrix (presence/absence)
             binary_matrix = (class_count_df_sorted[top_classes] > 0).astype(int)
@@ -308,24 +431,33 @@ if st.session_state.run_analysis:
             limited_matrix = limited_matrix[limited_matrix.sum(axis=1) > 0]
 
             if len(limited_matrix) == 0:
-                st.warning("No samples found with detections in the selected drug classes. Try adjusting the parameters.")
+                st.warning(
+                    "No samples found with detections in the selected drug classes. Try adjusting the parameters."
+                )
             else:
                 # Create UpSet plot data
                 upset_data = from_indicators(top_classes, limited_matrix.astype(bool))
 
-
                 upset_fig, ax = plt.subplots(figsize=(10, 6))
                 ax.set_axis_off()
-                UpSet(upset_data, subset_size='count', sort_by='cardinality', show_counts=True).plot(upset_fig)
-                upset_fig.suptitle(f"UpSet Plot for top {n_top_classes} classes and top {max_samples} samples", y=1.05)
+                UpSet(
+                    upset_data,
+                    subset_size="count",
+                    sort_by="cardinality",
+                    show_counts=True,
+                ).plot(upset_fig)
+                upset_fig.suptitle(
+                    f"UpSet Plot for top {n_top_classes} classes and top {max_samples} samples",
+                    y=1.05,
+                )
                 for ax_ in upset_fig.axes:
-                    ax_.grid(axis='x', visible=False)
+                    ax_.grid(axis="x", visible=False)
 
                 # Convert the figure to SVG and return as a string
                 import io
 
                 buf = io.StringIO()
-                upset_fig.savefig(buf, format='svg', bbox_inches='tight')
+                upset_fig.savefig(buf, format="svg", bbox_inches="tight")
                 svg = buf.getvalue()
                 buf.close()
                 plt.close(upset_fig)
@@ -338,44 +470,58 @@ if st.session_state.run_analysis:
                         data=svg,
                         file_name="upset_plot.svg",
                         mime="image/svg+xml",
-                        key='upset_plot_download'
+                        key="upset_plot_download",
                     )
                     # Add interpretation help
                     with st.expander("How to interpret this UpSet plot"):
-                        st.write("""
+                        st.write(
+                            """
                         - **Horizontal bars (left)**: Show the total number of samples containing each individual drug class
                         - **Vertical bars (bottom)**: Show the number of samples with each specific combination of drug classes
                         - **Connected dots**: Indicate which drug classes are part of each combination
                         - **Larger vertical bars**: Represent more common co-occurrence patterns
                         - **Single dots**: Show samples with only one drug class detected
                         - **Multiple connected dots**: Show samples with multiple drug classes detected together
-                        """)
+                        """
+                        )
 
         except Exception as e:
             st.error(f"Error creating UpSet plot: {str(e)}")
-            st.info("This might be due to insufficient data or missing dependencies. Make sure you have the 'upsetplot' package installed.")
+            st.info(
+                "This might be due to insufficient data or missing dependencies. Make sure you have the 'upsetplot' package installed."
+            )
 
     with tab_table:
         st.subheader("Top Detected Drug Classes")
-        nlarge = st.number_input("Number of Top Classes to Display", min_value=1, value=10, key="top_classes_input")
+        nlarge = st.number_input(
+            "Number of Top Classes to Display",
+            min_value=1,
+            value=10,
+            key="top_classes_input",
+        )
         top_pharm_classes = class_count_df_sorted.sum(axis=0).nlargest(nlarge)
         st.dataframe(
-            top_pharm_classes.reset_index().rename(columns={'index': 'Pharmacologic Class', 0: 'Total Detections'}),
-            use_container_width=True
+            top_pharm_classes.reset_index().rename(
+                columns={"index": "Pharmacologic Class", 0: "Total Detections"}
+            ),
+            use_container_width=True,
         )
-
 
     st.subheader("Drug Class Summary by Sample")
     # Clean up sample names
     class_count_df_display = class_count_df_sorted.copy()
-    class_count_df_display.index = class_count_df_display.index.str.replace(r'\.(mzML|mzXML) Peak area', '', regex=True)
-    class_count_df_display = class_count_df_display[["total_matches"] + class_count_df_display.columns.tolist()[:-1]].reset_index().rename(
-            columns={'index': 'Sample'})
-
-    st.dataframe(
-        class_count_df_display,
-        use_container_width=True
+    class_count_df_display.index = class_count_df_display.index.str.replace(
+        r"\.(mzML|mzXML) Peak area", "", regex=True
     )
+    class_count_df_display = (
+        class_count_df_display[
+            ["total_matches"] + class_count_df_display.columns.tolist()[:-1]
+        ]
+        .reset_index()
+        .rename(columns={"index": "Sample"})
+    )
+
+    st.dataframe(class_count_df_display, use_container_width=True)
 
     with st.spinner("Generating Sankey plot..."):
         add_sankey_graph()

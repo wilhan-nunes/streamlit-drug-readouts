@@ -4,7 +4,7 @@ import pandas as pd
 
 
 def load_and_filter_features(
-    file_path: str,
+    features_data: str | pd.DataFrame,
     blank_ids: List[str] | None = None,
     intensity_threshold: int = 10000,
     file_types: List[str] = ["mzML", "mzXML"],
@@ -12,13 +12,17 @@ def load_and_filter_features(
 ) -> pd.DataFrame:
     """
     Load and filter features from a CSV file based on intensity threshold and file types.
-    :param file_path: Path to the CSV file containing features.
+    :param features_data: Path to the CSV file OR dataframe containing features
     :param intensity_threshold: Basically only trust detections with peak area above this number
     :param file_types: List of possible file types to filter the features.
     :param blank_ids: List of substrings to identify blank or control columns.
     :return: pd.Dataframe: Filtered features intensity table.
     """
-    feature = pd.read_csv(file_path)
+    if isinstance(features_data, str):
+        feature = pd.read_csv(features_data)
+    elif isinstance(features_data, pd.DataFrame):
+        feature = features_data.copy()
+
     feature_filtered = feature.set_index("row ID").filter(regex="|".join(file_types))
     feature_filtered[feature_filtered < intensity_threshold] = 0
     if subtract_blanks:
@@ -53,16 +57,20 @@ def load_and_filter_features(
 
 
 def load_and_merge_annotations(
-    annotation_file: str, druglib_file: str, analoglib_file: str
+    fbmn_annotation_data: str | pd.DataFrame, druglib_file: str, analoglib_file: str
 ) -> pd.DataFrame:
     """
     Loads and merges annotations with drug library metadata.
-    :param annotation_file: Path to the annotation TSV file.
+    :param fbmn_annotation_data: Path to the annotation TSV file.
     :param druglib_file: Path to the parent drug metadata CSV.
     :param analoglib_file: Path to the drug analog metadata CSV.
     :return: pd.DataFrame: Annotation table merged with metadata.
     """
-    annotation = pd.read_csv(annotation_file, sep="\t")
+    if isinstance(fbmn_annotation_data, str):
+        annotation = pd.read_csv(fbmn_annotation_data, sep="\t")
+    elif isinstance(fbmn_annotation_data, pd.DataFrame):
+        annotation = fbmn_annotation_data
+
     annotation_filtered = annotation[["#Scan#", "SpectrumID", "Compound_Name"]]
     annotation_filtered.columns = ["FeatureID", "SpectrumID", "Compound_Name"]
 
@@ -332,14 +340,14 @@ def count_drug_class_occurrences(
 if __name__ == "__main__":
     # --- User-Defined Parameters Section ---
     # This section allows the user to modify parameters for running the script as a standalone file.
-    from utils import fetch_file
+    from gnpsdata import workflow_fbmn
 
     ## Setup file paths and task IDs
     task_id = "d6f37a11d90c4f249974280c3fc90108"
-    quant_file_path = fetch_file(task_id, "quant_table.csv", type="quant_table")
-    annotation_file_path = fetch_file(
-        task_id, "annotations.tsv", type="annotation_table"
-    )
+    quant_file_path = workflow_fbmn.get_quantification_dataframe(task_id, gnps2=True)
+    annotation_file_path = workflow_fbmn.get_library_match_dataframe(task_id, gnps2=True)
+
+
     drug_metadata_file = "data/GNPS_Drug_Library_Metadata_Drugs.csv"
     analog_metadata_file = "data/GNPS_Drug_Library_Metadata_Drug_Analogs_Updated.csv"
 
