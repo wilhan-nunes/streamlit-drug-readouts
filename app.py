@@ -260,6 +260,8 @@ if st.session_state.run_analysis:
     st.write("*The **filters must be cleared** to allow data editing. "
              "Filters show results for the original (not edited) table")
 
+    feature_annotation = st.session_state.feature_annotation
+
     # Simple filter option to select column and value to search (side by side)
     col_filter, col_value = st.columns(2)
     with col_filter:
@@ -269,7 +271,7 @@ if st.session_state.run_analysis:
         unique_values = st.session_state.feature_annotation[filter_col].unique()
     with col_value:
         filter_val = st.text_input(
-            "Select value to filter", key="filter_val"
+            "Enter value to filter", key="filter_val"
         )
 
 
@@ -304,6 +306,14 @@ if st.session_state.run_analysis:
         ):
             st.session_state['rerun_analysis'] = True
 
+
+    with st.expander('Features excluded from analysis by Default'):
+        st.dataframe(feature_annotation[
+            feature_annotation["chemical_source"].str.contains(
+                "Endogenous|Food", case=False, na=False
+            )
+                     ]
+                     )
 
     if st.session_state.get('rerun_analysis', False):
         rows_to_remove = st.session_state.feature_annotation_editor.get("deleted_rows", [])
@@ -511,21 +521,22 @@ if st.session_state.run_analysis:
             use_container_width=True,
         )
 
-    st.subheader("Drug Class Summary by Sample")
-    # Clean up sample names
-    class_count_df_display = class_count_df_sorted.copy()
-    class_count_df_display.index = class_count_df_display.index.str.replace(
-        r"\.(mzML|mzXML) Peak area", "", regex=True
-    )
-    class_count_df_display = (
-        class_count_df_display[
-            ["total_matches"] + class_count_df_display.columns.tolist()[:-1]
-        ]
-        .reset_index()
-        .rename(columns={"index": "Sample"})
-    )
+        st.subheader("Drug Class Summary by Sample")
+        # Clean up sample names
+        class_count_df_display = class_count_df_sorted.copy()
+        class_count_df_display.index = class_count_df_display.index.str.replace(
+            r"\.(mzML|mzXML) Peak area", "", regex=True
+        )
+        class_count_df_display = (
+            class_count_df_display[
+                ["total_matches"] + class_count_df_display.columns.tolist()[:-1]
+            ]
+            .reset_index()
+            .rename(columns={"index": "Sample"})
+        )
 
-    st.dataframe(class_count_df_display, use_container_width=True)
+        st.dataframe(class_count_df_display, use_container_width=True)
 
     with st.spinner("Generating Sankey plot..."):
+        st.markdown("---")
         add_sankey_graph()

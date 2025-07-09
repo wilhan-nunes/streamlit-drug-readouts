@@ -123,7 +123,8 @@ def generate_feature_annotation(
     feature_filtered = feature_filtered.rename(columns={"row ID": "FeatureID"})
     feature_filtered["FeatureID"] = feature_filtered["FeatureID"].astype(str)
     annotation_metadata["FeatureID"] = annotation_metadata["FeatureID"].astype(str)
-    return annotation_metadata.merge(feature_filtered, on="FeatureID", how="inner")
+    merged_feature_metadata = annotation_metadata.merge(feature_filtered, on="FeatureID", how="inner")
+    return merged_feature_metadata
 
 
 def stratify_by_drug_class(
