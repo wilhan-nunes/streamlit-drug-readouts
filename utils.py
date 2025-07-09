@@ -6,6 +6,67 @@ import pandas as pd
 import plotly.graph_objects as go
 import requests
 import streamlit as st
+import plotly.express as px
+
+
+def display_comparison_statistics():
+    """Display comparison between with/without analogs if both are available."""
+
+    stratified_df = st.session_state.get("stratified_df")
+    stratified_df_analogs = st.session_state.get("stratified_df_analogs")
+
+    if stratified_df is None or stratified_df_analogs is None:
+        st.info("Run analysis with both analog options to see comparison.")
+        return
+
+    # Compare detection rates
+    specific_categories = ["antibiotics", "antidepressants", "antihistamine",
+                           "antihypertensive", "Alzheimer", "antifungal", "HIVmed"]
+
+    all_categories = [name for name in stratified_df.columns.to_list() if name != 'Sample']
+    selected_categories = st.multiselect(
+        "Select categories to compare:",
+        options=all_categories,
+        default=["antibiotics", "antidepressants", "antihistamine",
+                 "antihypertensive", "Alzheimer", "antifungal", "HIVmed"]
+    )
+
+    comparison_data = []
+    sample_count = len(stratified_df)
+
+    for category in selected_categories:
+        if category in stratified_df.columns and category in stratified_df_analogs.columns:
+            count_without = (stratified_df[category] == "Yes").sum()
+            count_with = (stratified_df_analogs[category] == "Yes").sum()
+
+            comparison_data.append({
+                "Category": category.replace("_", " ").title(),
+                "Parent Drugs Only": count_without,
+                "With Analogs": count_with,
+                "Difference": count_with - count_without,
+                "% Increase": ((count_with - count_without) / max(count_without, 1)) * 100
+            })
+
+    if comparison_data:
+        comparison_df = pd.DataFrame(comparison_data)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("📊 Detection Comparison")
+            st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+
+        with col2:
+            st.subheader("📈 Impact of Including Analogs")
+            fig_comparison = px.bar(
+                comparison_df,
+                x="Category",
+                y=["Parent Drugs Only", "With Analogs"],
+                title="Drug Detection: Parent Drugs vs With Analogs",
+                barmode="group"
+            )
+            fig_comparison.update_layout(xaxis_tickangle=-45)
+            st.plotly_chart(fig_comparison, use_container_width=True)
 
 
 def generate_colors(n, base_color=(0.55, 0.85, 0.9)):

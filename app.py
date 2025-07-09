@@ -1,6 +1,7 @@
 from gnpsdata import workflow_fbmn
 from streamlit.components.v1 import html
 import streamlit as st
+from utils import display_comparison_statistics
 
 
 # Set page configuration
@@ -346,7 +347,7 @@ if st.session_state.run_analysis:
     st.divider()
 
     # Drug Detection Tables Section
-    st.header("🧪 Drug Detection Tables")
+    st.header("🧪 Drug Detection")
     with st.spinner("Processing..."):
         stratified_df = st.session_state.get("stratified_df")
         stratified_df_analogs = st.session_state.get("stratified_df_analogs")
@@ -358,14 +359,17 @@ if st.session_state.run_analysis:
         stratified_df_analogs["Sample"] = stratified_df_analogs["Sample"].str.replace(
             r"\.mz[XM]L Peak area", "", regex=True
         )
+        comparison_tab, table_tab = st.tabs(['Comparison', 'Tables'])
+        with comparison_tab:
+            display_comparison_statistics()
+        with table_tab:
+            st.subheader("Excluding Drug Analogs")
+            st.dataframe(stratified_df.style.map(highlight_yes), use_container_width=True)
 
-        st.subheader("Excluding Drug Analogs")
-        st.dataframe(stratified_df.style.map(highlight_yes), use_container_width=True)
-
-        with st.expander("Show results including drug analogs"):
-            st.dataframe(
-                stratified_df_analogs.style.map(highlight_yes), use_container_width=True
-            )
+            with st.expander("Show results including drug analogs"):
+                st.dataframe(
+                    stratified_df_analogs.style.map(highlight_yes), use_container_width=True
+                )
 
     st.divider()
 
