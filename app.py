@@ -1,8 +1,7 @@
 from gnpsdata import workflow_fbmn
 from streamlit.components.v1 import html
 import streamlit as st
-from utils import display_comparison_statistics
-
+from utils import display_comparison_statistics, load_example
 
 # Set page configuration
 page_title = "Drug Readout Analysis"
@@ -16,7 +15,6 @@ st.set_page_config(
     page_icon=":pill:",
     menu_items={"About": ("**App version: %s**" % app_version)},
 )
-
 
 # Add a tracking token
 html(
@@ -48,11 +46,14 @@ blank_str = query_params.get("blank_ids", None)
 # Sidebar inputs
 with st.sidebar:
     st.header("Inputs")
+    load_example_data = st.checkbox("Load example",
+                                    help="Load example from FBMN task ID d6f37a11d90c4f249974280c3fc90108", value=False)
     task_id = st.text_input(
         f"{BADGE_TASK_ID_} FBMN Workflow Task ID (GNPS2)",
         help="Enter the Task ID from a FBMN Workflow to retrieve the result files.",
         placeholder="enter task ID...",
         value=gnps_task_id,
+        disabled=(load_example_data == True)
     )
     # slider to set threshold for the number of features
     intensity_thresh = st.number_input(
@@ -77,47 +78,64 @@ with st.sidebar:
         )
 
     if st.button(
-        "Run Analysis",
-        icon="🏁",
-        help="Click to start the analysis with the provided inputs.",
-        use_container_width=True,
-        key="run_analysis_button",
-        disabled=not task_id
+            "Run Analysis",
+            icon="🏁",
+            help="Click to start the analysis with the provided inputs.",
+            use_container_width=True,
+            key="run_analysis_button",
+            disabled=not (task_id or load_example_data)
     ):
         st.session_state.run_analysis = True
 
     if st.button(
-        "Restart Session",
-        icon="♻️",
-        key="restart_session",
-        use_container_width=True,
-        type="primary",
+            "Restart Session",
+            icon="♻️",
+            key="restart_session",
+            use_container_width=True,
+            type="primary",
     ):
         # Reset the session state
         st.session_state.clear()
+        st.session_state['load_example_data'] = False
         st.rerun()
+
+    st.subheader("Contributors")
+    st.markdown(
+        """
+    - [Haoqi (Nina) Zhao PhD](https://scholar.google.com/citations?user=xW9jBO0AAAAJ) - UC San Diego
+    - [Wilhan Nunes PhD](https://scholar.google.com/citations?user=4cPVoeIAAAAJ) - UC San Diego
+    - [Mingxun Wang PhD](https://www.cs.ucr.edu/~mingxunw/) - UC Riverside
+    """
+    )
+
+    st.subheader("Documentations and Resources")
+    st.markdown("""
+    [Feature Based Molecular Networking](https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/fbmn/)
+    """
+                )
 # Process files when task ID and sample feature table are provided
 if st.session_state.get('run_analysis_button', False) or st.session_state.get("rerun_analysis", False):
 
     try:
-        # Retrieve lib_search using the task ID
-        with st.spinner("Downloading Task result files..."):
-            quant_file_df = workflow_fbmn.get_quantification_dataframe(task_id, gnps2=True)
-            annotation_file_df =  workflow_fbmn.get_library_match_dataframe(task_id, gnps2=True)
+        if not load_example_data:
+            # Retrieve lib_search using the task ID
+            with st.spinner("Downloading Task result files..."):
+                quant_file_df = workflow_fbmn.get_quantification_dataframe(task_id, gnps2=True)
+                annotation_file_df = workflow_fbmn.get_library_match_dataframe(task_id, gnps2=True)
 
-            DRUG_METADATA_FILE = "data/GNPS_Drug_Library_Metadata_Drugs.csv"
-            ANALOG_METADATA_FILE = (
-                "data/GNPS_Drug_Library_Metadata_Drug_Analogs_Updated.csv"
-            )
+                st.markdown(
+                    f"[:material/download: Input Quant table]"
+                    f"(https://gnps2.org/result?task={task_id}&viewname=quantificationdownload&resultdisplay_type=task) | "
+                    f"[:material/download: Input Annotation table]"
+                    f"(https://gnps2.org/resultfile?task={task_id}&file=nf_output/library/merged_results_with_gnps.tsv)",
+                )
+        else:
+            quant_file_df, annotation_file_df = load_example()
 
-
-            st.markdown(
-                f"[:material/download: Input Quant table]"
-                f"(https://gnps2.org/result?task={task_id}&viewname=quantificationdownload&resultdisplay_type=task) | "
-                f"[:material/download: Input Annotation table]"
-                f"(https://gnps2.org/resultfile?task={task_id}&file=nf_output/library/merged_results_with_gnps.tsv)",
-            )
-
+        DRUG_METADATA_FILE = "data/GNPS_Drug_Library_Metadata_Drugs.csv"
+        ANALOG_METADATA_FILE = (
+            "data/GNPS_Drug_Library_Metadata_Drug_Analogs_Updated.csv"
+        )
 
         # Process data
         with st.spinner("Processing data..."):
@@ -213,7 +231,7 @@ if st.session_state.run_analysis:
                 cols = st.columns(min(cols_per_row, num_categories - i))
 
                 for j, (display_name, stats) in enumerate(
-                    list(category_stats.items())[i : i + cols_per_row]
+                        list(category_stats.items())[i: i + cols_per_row]
                 ):
                     with cols[j]:
                         st.metric(
@@ -257,61 +275,39 @@ if st.session_state.run_analysis:
         "You can edit the table below and then rerun the analysis with your modifications. "
         "[Learn how](https://www.youtube.com/watch?v=6tah69LkfxE&list=TLGGKK4Dnf1gepcwNTA2MjAyNQ)"
     )
-    st.write("*The **filters must be cleared** to allow data editing. "
-             "Filters show results for the original (not edited) table")
+    st.warning(
+        "***Before editing** the data, please clear all filters. Filters display results based on the original, unedited table.")
 
     feature_annotation = st.session_state.feature_annotation
 
-    # Simple filter option to select column and value to search (side by side)
-    col_filter, col_value = st.columns(2)
-    with col_filter:
-        filter_col = st.selectbox(
-            "Filter by column", st.session_state.feature_annotation.columns, key="filter_col"
-        )
-        unique_values = st.session_state.feature_annotation[filter_col].unique()
-    with col_value:
-        filter_val = st.text_input(
-            "Enter value to filter", key="filter_val"
-        )
+    from utils import add_df_and_filtering
 
-
-    if filter_val:
-        filtered_df = st.session_state.feature_annotation[
-            st.session_state.feature_annotation[filter_col].str.contains(filter_val, case=False, na=False)
-            ]
-        edited_df = st.dataframe(
-            filtered_df,
-            key="feature_annotation_editor",
-            use_container_width=True,
-            height=400,
-        )
-    else:
-        # Use data_editor to allow editing and preserve changes
-        edited_df = st.data_editor(
-            st.session_state.feature_annotation,
-            key="feature_annotation_editor",
-            use_container_width=True,
-            num_rows="dynamic",
-            height=400,
-        )
+    filtered_df = add_df_and_filtering(feature_annotation, "feature_annotation")
+    edited_df = st.data_editor(
+        filtered_df,
+        key="feature_annotation_editor",
+        use_container_width=True,
+        num_rows="dynamic",
+        height=400,
+    )
 
     # Rerun button
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if st.button(
-            "🔄 Rerun Analysis with Edited Data",
-            use_container_width=True,
-            type="primary",
-            key="rerun_analysis_button",
+                "🔄 Rerun Analysis with Edited Data",
+                use_container_width=True,
+                type="primary",
+                key="rerun_analysis_button",
         ):
             st.session_state['rerun_analysis'] = True
 
-
-    with st.expander('Features excluded from analysis by Default'):
+    with st.expander('Features excluded from analysis by default', icon="⛔️"):
+        st.info("Excluded features with chemical source 'Endogenous' and/or 'Food'")
         st.dataframe(feature_annotation[
-            feature_annotation["chemical_source"].str.contains(
-                "Endogenous|Food", case=False, na=False
-            )
+                         feature_annotation["chemical_source"].str.contains(
+                             "Endogenous|Food", case=False, na=False
+                         )
                      ]
                      )
 
@@ -346,6 +342,7 @@ if st.session_state.run_analysis:
             # Add new rows if any
             if rows_to_add:
                 import pandas as pd
+
                 feature_annotation_edited = pd.concat(
                     [feature_annotation_edited, pd.DataFrame(rows_to_add)], ignore_index=True
                 )
@@ -530,7 +527,7 @@ if st.session_state.run_analysis:
         class_count_df_display = (
             class_count_df_display[
                 ["total_matches"] + class_count_df_display.columns.tolist()[:-1]
-            ]
+                ]
             .reset_index()
             .rename(columns={"index": "Sample"})
         )
@@ -540,3 +537,8 @@ if st.session_state.run_analysis:
     with st.spinner("Generating Sankey plot..."):
         st.markdown("---")
         add_sankey_graph()
+
+else:
+    from welcome import welcome_page
+
+    welcome_page()
