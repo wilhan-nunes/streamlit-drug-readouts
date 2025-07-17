@@ -40,19 +40,20 @@ st.title("Drug Readout Analysis")
 # defining query params to populate input fields
 query_params = st.query_params
 gnps_task_id = query_params.get("taskid", "")
-threshold = query_params.get("threshold", 100)
+threshold = query_params.get("threshold", 1000)
 blank_str = query_params.get("blank_ids", None)
 
 # Sidebar inputs
 with st.sidebar:
     st.header("Inputs")
     load_example_data = st.checkbox("Load example",
-                                    help="Load example from FBMN task ID d6f37a11d90c4f249974280c3fc90108", value=False)
+                                    help="Load example from FBMN task ID d6f37a11d90c4f249974280c3fc90108", value=False,
+                                    key='load_example_check')
     task_id = st.text_input(
         f"{BADGE_TASK_ID_} FBMN Workflow Task ID (GNPS2)",
         help="Enter the Task ID from a FBMN Workflow to retrieve the result files.",
         placeholder="enter task ID...",
-        value=gnps_task_id,
+        value=gnps_task_id if not st.session_state.get('load_example_check') else "d6f37a11d90c4f249974280c3fc90108",
         disabled=(load_example_data == True)
     )
     # slider to set threshold for the number of features
@@ -67,7 +68,7 @@ with st.sidebar:
 
     blank_ids = st.text_input(
         "Blank IDs (optional)",
-        value=blank_str,
+        value=blank_str if not st.session_state.get('load_example_check') else "QC",
         placeholder="Example: BLANK|IS|PoolQC|QCmix|SRM",
         help="Enter substrings to identify blank or control columns, separated by '|'. If given, the table will be filtered to remove these columns from the analysis. If not provided, all columns will be considered.",
     )
@@ -354,8 +355,8 @@ if st.session_state.run_analysis:
     st.divider()
 
     # Drug Detection Tables Section
-    st.header("🧪 Drug Detection")
     with st.spinner("Processing..."):
+        st.header("🧪 Drug Detection")
         stratified_df = st.session_state.get("stratified_df")
         stratified_df_analogs = st.session_state.get("stratified_df_analogs")
 
