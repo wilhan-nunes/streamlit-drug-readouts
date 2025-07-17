@@ -1,5 +1,6 @@
 import colorsys
 import os
+import subprocess
 from typing import Literal, List
 
 import pandas as pd
@@ -7,6 +8,13 @@ import plotly.graph_objects as go
 import requests
 import streamlit as st
 import plotly.express as px
+
+
+def get_git_short_rev():
+    try:
+        return subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], stderr=subprocess.DEVNULL).decode().strip()
+    except subprocess.CalledProcessError:
+        return ".git/ not found"
 
 
 def display_comparison_statistics():

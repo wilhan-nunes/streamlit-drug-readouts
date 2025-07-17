@@ -1,19 +1,22 @@
 from gnpsdata import workflow_fbmn
 from streamlit.components.v1 import html
 import streamlit as st
-from utils import display_comparison_statistics, load_example
+from utils import display_comparison_statistics, load_example, get_git_short_rev
 
 # Set page configuration
 page_title = "Drug Readout Analysis"
 
 # TODO: Bump version
 app_version = "2025-07-17"
+git_hash = get_git_short_rev()
+repo_link = "https://github.com/wilhan-nunes/streamlit_drug_readouts"
 
 st.set_page_config(
     page_title=page_title,
     layout="wide",
     page_icon=":pill:",
-    menu_items={"About": ("**App version: %s**" % app_version)},
+    menu_items={"About": (f"**App version**: {app_version} | "
+                          f"[**Git Hash**: {git_hash}]({repo_link}/commit/{git_hash})")},
 )
 
 # Add a tracking token
