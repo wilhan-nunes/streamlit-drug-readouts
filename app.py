@@ -217,7 +217,8 @@ if st.session_state.run_analysis:
             if col_name in stratified_df.columns:
                 count = (stratified_df[col_name] == "Yes").sum()
                 pct = (count / sample_count) * 100 if sample_count > 0 else 0
-                category_stats[display_name] = {"count": count, "percentage": pct}
+                if pct != 0:
+                    category_stats[display_name] = {"count": count, "percentage": pct}
                 # sort
 
         # Display specific drug categories in a grid
