@@ -7,7 +7,7 @@ from utils import display_comparison_statistics, load_example
 page_title = "Drug Readout Analysis"
 
 # TODO: Bump version
-app_version = "2025-06-18"
+app_version = "2025-07-17"
 
 st.set_page_config(
     page_title=page_title,
