@@ -133,7 +133,7 @@ def highlight_yes(val):
 
 
 def create_sankey_plot(
-    feature_annotation: pd.DataFrame, top_areas: int = 5, top_class: int = 10
+    feature_annotation: pd.DataFrame, top_areas: int = 5, top_class: int = 10, exclude_analogs=True
 ):
     """
     Create a Sankey plot
@@ -146,6 +146,19 @@ def create_sankey_plot(
     feature_annotation["name_parent_compound"] = feature_annotation[
         "name_parent_compound"
     ].str.strip()
+
+    if exclude_analogs:
+        feature_annotation = feature_annotation[
+            ~feature_annotation["chemical_source"].str.contains(
+                "Background|confidence|Endogenous|Food|analog", case=False, na=False
+            )
+        ]
+    else:
+        feature_annotation = feature_annotation[
+            ~feature_annotation["chemical_source"].str.contains(
+                "Background|confidence|Endogenous|Food", case=False, na=False
+            )
+        ]
 
     # Select columns containing name_parent_compound and file extensions
     peak_area_cols = [
@@ -324,7 +337,7 @@ def add_sankey_graph():
         return
 
     # User input for number of top therapeutic area
-    col1, col2 = st.columns([1, 1])
+    col1, col2, col3 = st.columns([1, 1, 1])
 
     with col1:
         top_n_areas = st.number_input(
@@ -345,12 +358,16 @@ def add_sankey_graph():
             step=1,
             help="Select how many top pharmacologic classes to include in the Sankey diagram",
         )
+    with col3:
+        analog_selection = st.radio("Analogs", options=['Include', 'Exclude'], horizontal=True, index=1)
 
     # Create and display the Sankey diagram
     with st.spinner("Generating Sankey diagram..."):
         try:
+            # here we are using the raw feature_annotation table, and the filtering to exclude/include analogs id done
+            # inside the function itself.
             fig = create_sankey_plot(
-                feature_annotation, top_areas=top_n_areas, top_class=top_n_class
+                feature_annotation, top_areas=top_n_areas, top_class=top_n_class, exclude_analogs=(analog_selection == 'Exclude')
             )
 
             if fig is not None:
