@@ -62,10 +62,10 @@ with st.sidebar:
     # slider to set threshold for the number of features
     intensity_thresh = st.number_input(
         "Peak Area Threshold",
-        min_value=100,
-        max_value=50000,
-        value=int(threshold),
-        step=100,
+        min_value=1E2,
+        max_value=5E9,
+        value=float(threshold),
+        step=1E2,
         help="Only detections with peak area above this number will be considered.",
     )
 
@@ -165,10 +165,10 @@ if st.session_state.get('run_analysis_button', False) or st.session_state.get("r
 
             # Perform analysis
             stratified_df = stratify_by_drug_class(
-                feature_annotation, exclude_analogs=True
+                feature_annotation, exclude_analogs=True, peak_threshold=threshold,
             )
             stratified_df_analogs = stratify_by_drug_class(
-                feature_annotation, exclude_analogs=False
+                feature_annotation, exclude_analogs=False, peak_threshold=threshold,
             )
 
             # Counting drug class occurrence per sample

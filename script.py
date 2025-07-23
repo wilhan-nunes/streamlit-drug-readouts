@@ -129,6 +129,7 @@ def generate_feature_annotation(
 
 def stratify_by_drug_class(
     feature_annotation: pd.DataFrame,
+    peak_threshold: int,
     column_pattern: str = r".*\.mzML|.*\.mzXML",
     exclude_analogs: bool = False,
 ) -> pd.DataFrame:
@@ -304,8 +305,8 @@ def stratify_by_drug_class(
     final_df = pd.concat(non_empty_dfs, sort=False)
 
     # Convert to binary (True/False) then to Yes/No
-    final_df_TF = final_df > 0
-    final_df_TF = final_df_TF.T.map(lambda x: "Yes" if x else "No")
+    final_df_TF = final_df >= peak_threshold
+    final_df_TF = final_df_TF.T.map(lambda x: "Yes" if x  else "No")
     final_df_TF = final_df_TF.reset_index().rename(columns={"index": "Sample"})
 
     return final_df_TF
