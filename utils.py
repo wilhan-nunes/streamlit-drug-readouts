@@ -38,8 +38,7 @@ def display_comparison_statistics():
     selected_categories = st.multiselect(
         "Select categories to compare:",
         options=all_categories,
-        default=["antibiotics", "antidepressants", "antihistamine",
-                 "antihypertensive", "Alzheimer", "antifungal", "HIVmed"]
+        default=specific_categories
     )
 
     comparison_data = []

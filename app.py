@@ -523,10 +523,10 @@ if st.session_state.run_analysis:
             value=10,
             key="top_classes_input",
         )
-        top_pharm_classes = class_count_df_sorted.sum(axis=0).nlargest(nlarge)
+        top_pharm_classes = ((class_count_df_sorted > 0).astype(int)).sum(axis=0).nlargest(nlarge)
         st.dataframe(
             top_pharm_classes.reset_index().rename(
-                columns={"index": "Pharmacologic Class", 0: "Total Detections"}
+                columns={"class_group": "Pharmacologic Class", 0: "Number of samples containing this class"}
             ),
             use_container_width=True,
         )
