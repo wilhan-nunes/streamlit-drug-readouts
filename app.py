@@ -163,7 +163,13 @@ if st.session_state.get('run_analysis_button', False) or st.session_state.get("r
                 st.success(f'Feature annotation get from session state. Shape: {feature_annotation.shape}')
                 st.session_state["rerun_analysis"] = False
 
-            # Perform analysis
+            feature_annotation_filtered = feature_annotation[
+                ~feature_annotation["chemical_source"].str.contains(
+                    "Background|confidence|Endogenous|Food", case=False, na=False
+                )
+            ]
+
+            # Perform analysis (here we use unfiltered feature_annotation, filtering is done by the function)
             stratified_df = stratify_by_drug_class(
                 feature_annotation, exclude_analogs=True, peak_threshold=threshold,
             )
@@ -173,7 +179,7 @@ if st.session_state.get('run_analysis_button', False) or st.session_state.get("r
 
             # Counting drug class occurrence per sample
             class_count_df = count_drug_class_occurrences(
-                feature_annotation, class_column="pharmacologic_class"
+                feature_annotation_filtered, class_column="pharmacologic_class"
             )
             class_count_df["total_matches"] = class_count_df.sum(axis=1)
             class_count_df_sorted = class_count_df.sort_values(
@@ -182,6 +188,7 @@ if st.session_state.get('run_analysis_button', False) or st.session_state.get("r
 
             # store all dataframes in session state
             st.session_state.feature_annotation = feature_annotation
+            st.session_state.feature_annotation_filtered = feature_annotation_filtered
             st.session_state.stratified_df = stratified_df
             st.session_state.stratified_df_analogs = stratified_df_analogs
             st.session_state.class_count_df_sorted = class_count_df_sorted
@@ -284,10 +291,11 @@ if st.session_state.run_analysis:
         "***Before editing** the data, please clear all filters. Filters display results based on the original, unedited table.")
 
     feature_annotation = st.session_state.feature_annotation
+    feature_annotation_filtered = st.session_state.feature_annotation_filtered
 
     from utils import add_df_and_filtering
 
-    filtered_df = add_df_and_filtering(feature_annotation, "feature_annotation")
+    filtered_df = add_df_and_filtering(feature_annotation_filtered, "feature_annotation_filtered")
     edited_df = st.data_editor(
         filtered_df,
         key="feature_annotation_editor",
@@ -308,10 +316,10 @@ if st.session_state.run_analysis:
             st.session_state['rerun_analysis'] = True
 
     with st.expander('Features excluded from analysis by default', icon="⛔️"):
-        st.info("Excluded features with chemical source 'Endogenous' and/or 'Food'")
+        st.info("Excluded features with chemical source 'Background', 'confidence', 'Endogenous' and/or 'Food'")
         st.dataframe(feature_annotation[
                          feature_annotation["chemical_source"].str.contains(
-                             "Endogenous|Food", case=False, na=False
+                             "Background|confidence|Endogenous|Food", case=False, na=False
                          )
                      ]
                      )
@@ -331,7 +339,7 @@ if st.session_state.run_analysis:
             else:
                 st.write("using original feature annotation")
 
-            feature_annotation = st.session_state.feature_annotation
+            feature_annotation_filtered = st.session_state.feature_annotation_filtered
 
             feature_annotation_edited = feature_annotation.copy()
 
