@@ -178,10 +178,11 @@ if st.session_state.get('run_analysis_button', False) or st.session_state.get("r
             )
 
             # Counting drug class occurrence per sample
-            class_count_df = count_drug_class_occurrences(
+            class_count_df, class_count_df_analog = count_drug_class_occurrences(
                 feature_annotation_filtered, class_column="pharmacologic_class"
             )
             class_count_df["total_matches"] = class_count_df.sum(axis=1)
+            class_count_df_analog["total_matches"] = class_count_df.sum(axis=1)
             class_count_df_sorted = class_count_df.sort_values(
                 "total_matches", ascending=False
             )
@@ -191,6 +192,8 @@ if st.session_state.get('run_analysis_button', False) or st.session_state.get("r
             st.session_state.feature_annotation_filtered = feature_annotation_filtered
             st.session_state.stratified_df = stratified_df
             st.session_state.stratified_df_analogs = stratified_df_analogs
+            st.session_state.class_count_df_analog = class_count_df_analog
+            st.session_state.class_count_df = class_count_df
             st.session_state.class_count_df_sorted = class_count_df_sorted
 
 
@@ -401,7 +404,6 @@ if st.session_state.run_analysis:
     # Drug Class Summary Section
     st.header("📈 Drug Class Summary")
 
-    class_count_df_sorted = st.session_state.get("class_count_df_sorted")
 
     # Create tabs for different visualizations
     tab_plot, tab_table = st.tabs(
@@ -417,19 +419,36 @@ if st.session_state.run_analysis:
             "This UpSet plot shows how different drug classes co-occur across samples. Each bar represents a unique combination of drug classes."
         )
 
+        # Data for upset plot
+        class_count_df = st.session_state.get("class_count_df")
+        class_count_df_analog = st.session_state.get("class_count_df_analog")
+        class_count_df_sorted = class_count_df.sort_values(
+            "total_matches", ascending=False
+        )
+
         # Controls for UpSet plot
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns([1,2,2])
         with col1:
+            upset_analog_inclusion = st.radio("Drug Analogs", options=['Include', 'Exclude'], index=1)
+            if upset_analog_inclusion == "Include":
+                upset_class_count = class_count_df_analog.sort_values(
+            "total_matches", ascending=False
+        )
+            else:
+                upset_class_count = class_count_df.sort_values(
+            "total_matches", ascending=False
+        )
+        with col2:
             n_top_classes = st.number_input(
-                "Number of Top Classes for UpSet Plot",
+                f"Number of Top Classes for UpSet Plot :green-badge[{len(upset_class_count)-1} total]",
                 min_value=1,
                 value=4,
                 key="upset_classes_input",
                 help="Select how many top drug classes to include in the UpSet plot",
             )
-        with col2:
+        with col3:
             max_samples = st.number_input(
-                "Maximum Samples to Include",
+                f"Maximum Samples to Include :green-badge[{sample_count} total]",
                 min_value=1,
                 value=50,
                 key="upset_samples_input",
@@ -439,13 +458,13 @@ if st.session_state.run_analysis:
         try:
             # Prepare binary matrix for top classes
             top_classes = (
-                class_count_df_sorted.sum(axis=0)
+                upset_class_count.sum(axis=0)
                 .nlargest(n_top_classes + 1)
                 .index.tolist()
             )
             top_classes.remove("total_matches")
             # Create binary matrix (presence/absence)
-            binary_matrix = (class_count_df_sorted[top_classes] > 0).astype(int)
+            binary_matrix = (upset_class_count[top_classes] > 0).astype(int)
             binary_matrix.index.name = "Sample"
 
             # Limit number of samples to avoid overcrowding
@@ -471,7 +490,7 @@ if st.session_state.run_analysis:
                     show_counts=True,
                 ).plot(upset_fig)
                 upset_fig.suptitle(
-                    f"UpSet Plot for top {n_top_classes} classes and top {max_samples} samples",
+                    f"UpSet Plot for top {n_top_classes} classes and top {max_samples} samples\n(Analogs {upset_analog_inclusion}d)",
                     y=1.05,
                 )
                 for ax_ in upset_fig.axes:
@@ -516,14 +535,14 @@ if st.session_state.run_analysis:
             )
 
     with tab_table:
-        st.subheader("Top Detected Drug Classes")
+        st.subheader(f"Top Detected Drug Classes (Analogs {upset_analog_inclusion}d)")
         nlarge = st.number_input(
             "Number of Top Classes to Display",
             min_value=1,
             value=10,
             key="top_classes_input",
         )
-        top_pharm_classes = ((class_count_df_sorted > 0).astype(int)).sum(axis=0).nlargest(nlarge)
+        top_pharm_classes = ((upset_class_count > 0).astype(int)).sum(axis=0).nlargest(nlarge)
         st.dataframe(
             top_pharm_classes.reset_index().rename(
                 columns={"class_group": "Pharmacologic Class", 0: "Number of samples containing this class"}
@@ -533,7 +552,7 @@ if st.session_state.run_analysis:
 
         st.subheader("Drug Class Summary by Sample")
         # Clean up sample names
-        class_count_df_display = class_count_df_sorted.copy()
+        class_count_df_display = upset_class_count.copy()
         class_count_df_display.index = class_count_df_display.index.str.replace(
             r"\.(mzML|mzXML) Peak area", "", regex=True
         )

@@ -316,13 +316,13 @@ def count_drug_class_occurrences(
     feature_annotation: pd.DataFrame,
     class_column: str = "pharmacologic_class",
     file_extensions: List[str] = ["mzML", "mzXML"],
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Counts the number of times each drug class appears in each sample.
     :param feature_annotation: Annotated feature intensity data.
     :param class_column: Column name for drug class (e.g., 'pharmacologic_class').
     :param file_extensions: File extensions used to select intensity columns.
-    :return: pd.DataFrame: DataFrame with sample-wise counts for each class.
+    :return: pd.DataFrame: two DataFrames with sample-wise counts for each class, without and with analogs. (in this order)
     """
     pattern = "|".join(file_extensions)
     df = feature_annotation.copy()
@@ -336,8 +336,22 @@ def count_drug_class_occurrences(
     df_class_binary[df_class_binary.columns[1:]] = (
         df_class_binary[df_class_binary.columns[1:]].gt(0).astype(int)
     )
-    return df_class_binary.groupby("class_group").sum().T
-
+    # Without analogs
+    df_no_analogs = feature_annotation[~feature_annotation["chemical_source"].str.contains("analog", case=False, na=False)].copy()
+    df_no_analogs[class_column] = df_no_analogs[class_column].fillna("NA")
+    df_no_analogs = df_no_analogs[df_no_analogs[class_column] != "NA"]
+    df_no_analogs = df_no_analogs[df_no_analogs[class_column] != "no_match"]
+    df_no_analogs = df_no_analogs.assign(class_group=df_no_analogs[class_column].str.split("\\|")).explode("class_group")
+    df_no_analogs = df_no_analogs[df_no_analogs["class_group"].notna()]
+    df_class_no_analogs = df_no_analogs[["class_group"] + df_no_analogs.filter(regex=pattern).columns.tolist()]
+    df_class_binary_no_analogs = df_class_no_analogs.copy()
+    df_class_binary_no_analogs[df_class_binary_no_analogs.columns[1:]] = (
+        df_class_binary_no_analogs[df_class_binary_no_analogs.columns[1:]].gt(0).astype(int)
+    )
+    return (
+        df_class_binary_no_analogs.groupby("class_group").sum().T,
+        df_class_binary.groupby("class_group").sum().T,
+    )
 
 if __name__ == "__main__":
     # --- User-Defined Parameters Section ---
