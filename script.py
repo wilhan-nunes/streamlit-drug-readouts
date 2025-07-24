@@ -5,13 +5,14 @@ import pandas as pd
 
 def load_and_filter_features(
     features_data: str | pd.DataFrame,
-    blank_ids: List[str] | None = None,
+    blank_ids: str | None = None,
     intensity_threshold: int = 10000,
     file_types: List[str] = ["mzML", "mzXML"],
     subtract_blanks: bool = False,
 ) -> pd.DataFrame:
     """
     Load and filter features from a CSV file based on intensity threshold and file types.
+    :param subtract_blanks: whether to subtract the blank samples or not
     :param features_data: Path to the CSV file OR dataframe containing features
     :param intensity_threshold: Basically only trust detections with peak area above this number
     :param file_types: List of possible file types to filter the features.
@@ -29,10 +30,10 @@ def load_and_filter_features(
         # Optionally perform blank subtraction if needed
         # Identify blank and sample columns based on their names
         feature_blank = feature_filtered.loc[
-            :, feature_filtered.columns.str.contains("|".join(blank_ids))
+            :, feature_filtered.columns.str.contains(blank_ids.strip(), case=False)
         ]
         feature_sample = feature_filtered.loc[
-            :, ~feature_filtered.columns.str.contains("|".join(blank_ids))
+            :, ~feature_filtered.columns.str.contains(blank_ids.strip(), case=False)
         ]
 
         # Ensure row indices match
