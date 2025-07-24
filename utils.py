@@ -35,6 +35,7 @@ def display_comparison_statistics():
                            "antihypertensive", "Alzheimer", "antifungal", "HIVmed"]
 
     all_categories = [name for name in stratified_df.columns.to_list() if name != 'Sample']
+    all_categories = set(all_categories + [name for name in stratified_df_analogs.columns.to_list() if name != 'Sample'])
     selected_categories = st.multiselect(
         "Select categories to compare:",
         options=all_categories,
@@ -45,17 +46,17 @@ def display_comparison_statistics():
     sample_count = len(stratified_df)
 
     for category in selected_categories:
-        if category in stratified_df.columns and category in stratified_df_analogs.columns:
-            count_without = (stratified_df[category] == "Yes").sum()
-            count_with = (stratified_df_analogs[category] == "Yes").sum()
+        count_without = (stratified_df[category] == "Yes").sum() if category in stratified_df.columns else 0
+        count_with = (
+                    stratified_df_analogs[category] == "Yes").sum() if category in stratified_df_analogs.columns else 0
 
-            comparison_data.append({
-                "Category": category.replace("_", " ").title(),
-                "Parent Drugs Only": count_without,
-                "With Analogs": count_with,
-                "Difference": count_with - count_without,
-                "% Increase": ((count_with - count_without) / max(count_without, 1)) * 100
-            })
+        comparison_data.append({
+            "Category": category.replace("_", " ").title(),
+            "Parent Drugs Only": count_without,
+            "With Analogs": count_with,
+            "Difference": count_with - count_without,
+            "% Increase": ((count_with - count_without) / max(count_without, 1)) * 100
+        })
 
     if comparison_data:
         comparison_df = pd.DataFrame(comparison_data)
