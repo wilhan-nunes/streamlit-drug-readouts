@@ -360,7 +360,8 @@ if __name__ == "__main__":
     from gnpsdata import workflow_fbmn
 
     ## Setup file paths and task IDs
-    task_id = "d6f37a11d90c4f249974280c3fc90108"
+    task_id = "4d99fc25d84143bdbbf2dd07bf044e5e"
+    threshold = 10000
     quant_file_path = workflow_fbmn.get_quantification_dataframe(task_id, gnps2=True)
     annotation_file_path = workflow_fbmn.get_library_match_dataframe(task_id, gnps2=True)
 
@@ -369,9 +370,9 @@ if __name__ == "__main__":
     analog_metadata_file = "data/GNPS_Drug_Library_Metadata_Drug_Analogs_Updated.csv"
 
     # Load and process data
-    blank_ids = ["QC"]  # This should be set to the actual blank IDs if available
+    blank_ids = "blank"  # This must be set to the actual blank IDs
     feature_filtered = load_and_filter_features(
-        quant_file_path, blank_ids, subtract_blanks=False
+        quant_file_path, blank_ids, subtract_blanks=True
     )
 
     annotation_metadata = load_and_merge_annotations(
@@ -380,16 +381,19 @@ if __name__ == "__main__":
     feature_annotation = generate_feature_annotation(
         annotation_metadata, feature_filtered
     )
-    stratified_df = stratify_by_drug_class(feature_annotation, exclude_analogs=True)
+    stratified_df = stratify_by_drug_class(feature_annotation, exclude_analogs=True, peak_threshold=threshold)
     stratified_df_analogs = stratify_by_drug_class(
-        feature_annotation, exclude_analogs=False
+        feature_annotation, exclude_analogs=False, peak_threshold=threshold
     )
 
     # adding a summary of drug class occurrence per sample
-    class_count_df = count_drug_class_occurrences(
+    class_count_df, class_count_df_analog = count_drug_class_occurrences(
         feature_annotation, class_column="pharmacologic_class"
     )
     class_count_df["total_matches"] = class_count_df.sum(axis=1)
+    class_count_df_analog["total_matches"] = class_count_df_analog.sum(axis=1)
+
+
     class_count_df_sorted = class_count_df.sort_values("total_matches", ascending=False)
 
     # Save the stratified DataFrame to a CSV file
