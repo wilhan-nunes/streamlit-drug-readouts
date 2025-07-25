@@ -243,18 +243,20 @@ if st.session_state.run_analysis:
             cols_per_row = 3
 
             for i in range(0, num_categories, cols_per_row):
-                cols = st.columns(min(cols_per_row, num_categories - i))
-
-                for j, (display_name, stats) in enumerate(
-                        list(category_stats.items())[i: i + cols_per_row]
-                ):
-                    with cols[j]:
-                        st.metric(
-                            display_name,
-                            f"{stats['count']} ({stats['percentage']:.1f}%)",
-                            help=f"Number of samples containing {display_name.split(' ', 1)[1].lower()}",
-                        )
-
+                cols = st.columns(cols_per_row)
+                row_items = list(category_stats.items())[i: i + cols_per_row]
+                for j in range(cols_per_row):
+                    if j < len(row_items):
+                        display_name, stats = row_items[j]
+                        with cols[j]:
+                            st.metric(
+                                display_name,
+                                f"{stats['count']} ({stats['percentage']:.1f}%)",
+                                help=f"Number of samples containing {display_name.split(' ', 1)[1].lower()}",
+                            )
+                    else:
+                        with cols[j]:
+                            st.empty()
         # Overall summary metrics
         st.subheader("📈 Overall Summary")
         col1, col2, col3 = st.columns(3)
