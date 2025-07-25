@@ -304,14 +304,15 @@ def create_sankey_plot(
     )
 
     fig = go.Figure(data=[sankey_trace])
-
+    analogs_str = "Analogs excluded" if exclude_analogs else "Analogs included"
     fig.update_layout(
-        title_text="Drug Detection Sankey Diagram",
+        title_text=f"Drug Detection Sankey Diagram ({analogs_str})<br>"
+                   f"<sub>Therapeutic area → Pharmacologic Class → Drug Name</sub>",
         font_size=14,
         font_family="Arial",
         height=1000,
         font=dict(color="white"),
-        margin=dict(l=40, r=40, t=40, b=40),
+        margin=dict(l=40, r=40, t=70, b=40),
     )
 
     return fig
@@ -385,9 +386,9 @@ def add_sankey_graph():
                 with st.expander("How to interpret this Sankey diagram"):
                     st.write(
                         """
-                    - **Left nodes (Pharmacological Areas)**: Shows the different sources of detected compounds
-                    - **Center nodes (Therapeutic Area)**: Shows the therapeutic areas
-                    - **Right nodes (Compound name)**: Shows the compound names
+                    - **Left nodes (Therapeutic Area)**: Shows the therapeutic areas in which the drugs are used
+                    - **Center nodes (Pharmacological Class)**: Indicates the drug classes or mechanisms of action.
+                    - **Right nodes (Drug name)**: Shows the drugs/compounds names
                     - **Flow width**: The thickness of each flow represents the **number counts** for the connecting nodes
                     """
                     )
