@@ -570,7 +570,7 @@ if st.session_state.run_analysis:
 
     with st.spinner("Generating Sankey plot..."):
         st.markdown("---")
-        add_sankey_graph()
+        add_sankey_graph(feature_annotation_filtered)
 
 else:
     from welcome import welcome_page
