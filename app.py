@@ -171,10 +171,10 @@ if st.session_state.get('run_analysis_button', False) or st.session_state.get("r
 
             # Perform analysis (here we use unfiltered feature_annotation, filtering is done by the function)
             stratified_df = stratify_by_drug_class(
-                feature_annotation, exclude_analogs=True, peak_threshold=threshold,
+                feature_annotation, exclude_analogs=True, peak_threshold=intensity_thresh,
             )
             stratified_df_analogs = stratify_by_drug_class(
-                feature_annotation, exclude_analogs=False, peak_threshold=threshold,
+                feature_annotation, exclude_analogs=False, peak_threshold=intensity_thresh,
             )
 
             # Counting drug class occurrence per sample
