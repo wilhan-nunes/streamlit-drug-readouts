@@ -229,10 +229,9 @@ def stratify_by_drug_class(
 
     # 6. Antihypertensives
     antihypertensives = exo_drug[
-        exo_drug["therapeutic_indication"].str.contains(
-            "hypertension", case=False, na=False
-        )
-    ]
+        (exo_drug["therapeutic_indication"].str.contains("hypertension", case=False, na=False)) &
+        (exo_drug["therapeutic_area"].str.contains("cardiology", case=False, na=False))
+        ]
     agg_antihypertensives = antihypertensives[sample_columns].sum().to_frame().T
     agg_antihypertensives.index = ["antihypertensive"]
 
@@ -396,7 +395,7 @@ if __name__ == "__main__":
 
     class_count_df_sorted = class_count_df.sort_values("total_matches", ascending=False)
 
-    # Save the stratified DataFrame to a CSV file
-    stratified_df.to_csv("stratified.tsv", sep="\t", index=False)
-    stratified_df_analogs.to_csv("stratified_analogs.tsv", sep="\t", index=False)
-    feature_annotation.to_csv("feature_annotation.tsv", sep="\t", index=False)
+    # # Save the stratified DataFrame to a CSV file
+    # stratified_df.to_csv("stratified.tsv", sep="\t", index=False)
+    # stratified_df_analogs.to_csv("stratified_analogs.tsv", sep="\t", index=False)
+    # feature_annotation.to_csv("feature_annotation.tsv", sep="\t", index=False)
