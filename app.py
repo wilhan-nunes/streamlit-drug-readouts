@@ -1,7 +1,10 @@
 from streamlit.components.v1 import html
 import streamlit as st
 from utils import display_comparison_statistics, load_example, get_git_short_rev, fbmn_quant_download_wrapper, \
-    fbmn_lib_download_wrapper
+    fbmn_lib_download_wrapper, create_upset_plot
+import warnings
+
+warnings.filterwarnings('ignore', category=FutureWarning, module='upsetplot')
 
 # Set page configuration
 page_title = "Drug Readout Analysis"
@@ -396,7 +399,7 @@ if st.session_state.run_analysis:
         )
         with col2:
             n_top_classes = st.number_input(
-                f"Number of Top Classes for UpSet Plot :green-badge[{len(upset_class_count)-1} total]",
+                f"Number of Top Classes for UpSet Plot :green-badge[{len(upset_class_count.columns)-1} total]",
                 min_value=1,
                 value=4,
                 key="upset_classes_input",
@@ -406,89 +409,37 @@ if st.session_state.run_analysis:
             max_samples = st.number_input(
                 f"Maximum Samples to Include :green-badge[{sample_count} total]",
                 min_value=1,
-                value=50,
+                value=sample_count,
                 key="upset_samples_input",
                 help="Limit the number of samples to avoid overcrowding",
             )
 
         try:
-            # Prepare binary matrix for top classes
-            top_classes = (
-                upset_class_count.sum(axis=0)
-                .nlargest(n_top_classes + 1)
-                .index.tolist()
-            )
-            top_classes.remove("total_matches")
-            # Create binary matrix (presence/absence)
-            binary_matrix = (upset_class_count[top_classes] > 0).astype(int)
-            binary_matrix.index.name = "Sample"
+            svg = create_upset_plot(upset_class_count, n_top_classes, max_samples, upset_analog_inclusion)
 
-            # Limit number of samples to avoid overcrowding
-            limited_matrix = binary_matrix.head(max_samples)
-
-            # Remove samples with no detections in the selected classes
-            limited_matrix = limited_matrix[limited_matrix.sum(axis=1) > 0]
-
-            if len(limited_matrix) == 0:
-                st.warning(
-                    "No samples found with detections in the selected drug classes. Try adjusting the parameters."
+            _, upset_col, _ = st.columns([1, 6, 1])
+            with upset_col:
+                st.image(svg, use_container_width=False)
+                st.download_button(
+                    label=":material/download: Download as SVG",
+                    data=svg,
+                    file_name="upset_plot.svg",
+                    mime="image/svg+xml",
+                    key="upset_plot_download",
                 )
-            else:
-                # Create UpSet plot data
-                upset_data = from_indicators(top_classes, limited_matrix.astype(bool))
 
-                upset_fig, ax = plt.subplots(figsize=(10, 6))
-                ax.set_axis_off()
-                UpSet(
-                    upset_data,
-                    subset_size="count",
-                    sort_by="cardinality",
-                    show_counts=True,
-                ).plot(upset_fig)
-                upset_fig.suptitle(
-                    f"UpSet Plot for top {n_top_classes} classes and top {max_samples} samples\n(Analogs {upset_analog_inclusion}d)",
-                    y=1.05,
-                )
-                for ax_ in upset_fig.axes:
-                    ax_.grid(axis="x", visible=False)
-
-                # Convert the figure to SVG and return as a string
-                import io
-
-                buf = io.StringIO()
-                upset_fig.savefig(buf, format="svg", bbox_inches="tight")
-                svg = buf.getvalue()
-                buf.close()
-                plt.close(upset_fig)
-
-                _, upset_col, _ = st.columns([1, 6, 1])
-                with upset_col:
-                    st.image(svg, use_container_width=False)
-                    st.download_button(
-                        label=":material/download: Download as SVG",
-                        data=svg,
-                        file_name="upset_plot.svg",
-                        mime="image/svg+xml",
-                        key="upset_plot_download",
-                    )
-                    # Add interpretation help
-                    with st.expander("How to interpret this UpSet plot"):
-                        st.write(
-                            """
-                        - **Horizontal bars (left)**: Show the total number of samples containing each individual drug class
-                        - **Vertical bars (bottom)**: Show the number of samples with each specific combination of drug classes
-                        - **Connected dots**: Indicate which drug classes are part of each combination
-                        - **Larger vertical bars**: Represent more common co-occurrence patterns
-                        - **Single dots**: Show samples with only one drug class detected
-                        - **Multiple connected dots**: Show samples with multiple drug classes detected together
-                        """
-                        )
+                with st.expander("How to interpret this UpSet plot"):
+                    st.write("""
+                                - **Horizontal bars (left)**: Show the total number of samples containing each individual drug class
+                                - **Vertical bars (bottom)**: Show the number of samples with each specific combination of drug classes
+                                - **Connected dots**: Indicate which drug classes are part of each combination
+                                - **Larger vertical bars**: Represent more common co-occurrence patterns
+                                - **Single dots**: Show samples with only one drug class detected
+                                - **Multiple connected dots**: Show samples with multiple drug classes detected together
+                                """)
 
         except Exception as e:
             st.error(f"Error creating UpSet plot: {str(e)}")
-            st.info(
-                "This might be due to insufficient data or missing dependencies. Make sure you have the 'upsetplot' package installed."
-            )
 
     with tab_table:
         st.subheader(f"Top Detected Drug Classes (Analogs {upset_analog_inclusion}d)")

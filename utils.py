@@ -142,6 +142,7 @@ def highlight_yes(val):
     return ""
 
 
+@st.cache_data
 def create_sankey_plot(feature_annotation: pd.DataFrame, top_areas: int = 5, top_class: int = 10, exclude_analogs=True):
     """
     Create a Sankey plot
@@ -450,6 +451,52 @@ def add_df_and_filtering(df, key_prefix:str, default_cols: List = None):
 
     return filtered_df[cols_to_show]
 
+
+@st.cache_data
+def create_upset_plot(upset_class_count, n_top_classes, max_samples, upset_analog_inclusion):
+    """Create and display UpSet plot"""
+    import matplotlib.pyplot as plt
+    from upsetplot import UpSet, from_indicators
+    import io
+
+
+    # Prepare binary matrix for top classes
+    top_classes = upset_class_count.sum(axis=0).nlargest(n_top_classes + 1).index.tolist()
+    top_classes.remove("total_matches")
+
+    # Create binary matrix (presence/absence)
+    binary_matrix = (upset_class_count[top_classes] > 0).astype(int)
+    binary_matrix.index.name = "Sample"
+
+    # Limit number of samples
+    limited_matrix = binary_matrix.head(max_samples)
+    limited_matrix = limited_matrix[limited_matrix.sum(axis=1) > 0]
+
+    if len(limited_matrix) == 0:
+        st.warning("No samples found with detections in the selected drug classes. Try adjusting the parameters.")
+    else:
+        # Create UpSet plot
+        upset_data = from_indicators(top_classes, limited_matrix.astype(bool))
+
+        upset_fig, ax = plt.subplots(figsize=(10, 6))
+        ax.set_axis_off()
+        UpSet(upset_data, subset_size="count", sort_by="cardinality", show_counts=True).plot(upset_fig)
+        upset_fig.suptitle(
+            f"UpSet Plot for top {n_top_classes} classes and top {max_samples} samples\n(Analogs {upset_analog_inclusion}d)",
+            y=1.05,
+        )
+
+        for ax_ in upset_fig.axes:
+            ax_.grid(axis="x", visible=False)
+
+        # Convert to SVG
+        buf = io.StringIO()
+        upset_fig.savefig(buf, format="svg", bbox_inches="tight")
+        svg = buf.getvalue()
+        buf.close()
+        plt.close(upset_fig)
+
+        return svg
 
 if __name__ == "__main__":
     # Example usage
