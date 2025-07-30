@@ -155,19 +155,14 @@ if st.session_state.get('run_analysis_button', False) or st.session_state.get("r
                 annotation_file_df, DRUG_METADATA_FILE, ANALOG_METADATA_FILE
             )
             if not st.session_state.get("rerun_analysis", False):
-                feature_annotation = generate_feature_annotation(
+                feature_annotation, excluded_features = generate_feature_annotation(
                     annotation_metadata, feature_filtered
                 )
             else:
                 feature_annotation = st.session_state.get('feature_annotation_edited')
                 st.success(f'Feature annotation get from session state. Shape: {feature_annotation.shape}')
                 st.session_state["rerun_analysis"] = False
-
-            feature_annotation_filtered = feature_annotation[
-                ~feature_annotation["chemical_source"].str.contains(
-                    "Background|confidence|Endogenous|Food", case=False, na=False
-                )
-            ]
+                excluded_features = st.session_state.excluded_features
 
             # Perform analysis (here we use unfiltered feature_annotation, filtering is done by the function)
             stratified_df = stratify_by_drug_class(
@@ -179,7 +174,7 @@ if st.session_state.get('run_analysis_button', False) or st.session_state.get("r
 
             # Counting drug class occurrence per sample
             class_count_df, class_count_df_analog = count_drug_class_occurrences(
-                feature_annotation_filtered, class_column="pharmacologic_class"
+                feature_annotation, class_column="pharmacologic_class"
             )
             class_count_df["total_matches"] = class_count_df.sum(axis=1)
             class_count_df_analog["total_matches"] = class_count_df.sum(axis=1)
@@ -189,12 +184,13 @@ if st.session_state.get('run_analysis_button', False) or st.session_state.get("r
 
             # store all dataframes in session state
             st.session_state.feature_annotation = feature_annotation
-            st.session_state.feature_annotation_filtered = feature_annotation_filtered
             st.session_state.stratified_df = stratified_df
             st.session_state.stratified_df_analogs = stratified_df_analogs
             st.session_state.class_count_df_analog = class_count_df_analog
             st.session_state.class_count_df = class_count_df
             st.session_state.class_count_df_sorted = class_count_df_sorted
+            st.session_state.default_excluded_features = excluded_features
+
 
 
     except Exception as e:
@@ -296,11 +292,10 @@ if st.session_state.run_analysis:
         "***Before editing** the data, please clear all filters. Filters display results based on the original, unedited table.")
 
     feature_annotation = st.session_state.feature_annotation
-    feature_annotation_filtered = st.session_state.feature_annotation_filtered
 
     from utils import add_df_and_filtering
 
-    filtered_df = add_df_and_filtering(feature_annotation_filtered, "feature_annotation_filtered")
+    filtered_df = add_df_and_filtering(feature_annotation, "feature_annotation_filtered")
     edited_df = st.data_editor(
         filtered_df,
         key="feature_annotation_editor",
@@ -322,12 +317,7 @@ if st.session_state.run_analysis:
 
     with st.expander('Features excluded from analysis by default', icon="⛔️"):
         st.info("Excluded features with chemical source 'Background', 'confidence', 'Endogenous' and/or 'Food'")
-        st.dataframe(feature_annotation[
-                         feature_annotation["chemical_source"].str.contains(
-                             "Background|confidence|Endogenous|Food", case=False, na=False
-                         )
-                     ]
-                     )
+        st.dataframe(st.session_state.default_excluded_features)
 
     if st.session_state.get('rerun_analysis', False):
         rows_to_remove = st.session_state.feature_annotation_editor.get("deleted_rows", [])
@@ -343,9 +333,6 @@ if st.session_state.run_analysis:
                 # If the user has edited the feature annotation, use that instead of the original
             else:
                 st.write("using original feature annotation")
-
-            feature_annotation_filtered = st.session_state.feature_annotation_filtered
-
             feature_annotation_edited = feature_annotation.copy()
 
             # Remove rows safely
@@ -570,7 +557,7 @@ if st.session_state.run_analysis:
 
     with st.spinner("Generating Sankey plot..."):
         st.markdown("---")
-        add_sankey_graph(feature_annotation_filtered)
+        add_sankey_graph(st.session_state.feature_annotation)
 
 else:
     from welcome import welcome_page

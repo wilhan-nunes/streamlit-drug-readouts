@@ -2,7 +2,6 @@ import colorsys
 import os
 import subprocess
 from typing import Literal, List
-
 import pandas as pd
 import plotly.graph_objects as go
 import requests
@@ -132,8 +131,7 @@ def highlight_yes(val):
     return ""
 
 
-def create_sankey_plot(feature_annotation_filtered: pd.DataFrame, top_areas: int = 5, top_class: int = 10,
-                       exclude_analogs=True):
+def create_sankey_plot(feature_annotation: pd.DataFrame, top_areas: int = 5, top_class: int = 10, exclude_analogs=True):
     """
     Create a Sankey plot
 
@@ -142,13 +140,13 @@ def create_sankey_plot(feature_annotation_filtered: pd.DataFrame, top_areas: int
     """
 
     # Clean the name_parent_compound column (equivalent to str_trim)
-    feature_annotation_filtered["name_parent_compound"] = feature_annotation_filtered[
+    feature_annotation["name_parent_compound"] = feature_annotation[
         "name_parent_compound"
     ].str.strip()
 
     if exclude_analogs:
-        feature_annotation_filtered = feature_annotation_filtered[
-            ~feature_annotation_filtered["chemical_source"].str.contains(
+        feature_annotation = feature_annotation[
+            ~feature_annotation["chemical_source"].str.contains(
                 "analog", case=False, na=False
             )
         ]
@@ -156,10 +154,10 @@ def create_sankey_plot(feature_annotation_filtered: pd.DataFrame, top_areas: int
     # Select columns containing name_parent_compound and file extensions
     peak_area_cols = [
         col
-        for col in feature_annotation_filtered.columns
+        for col in feature_annotation.columns
         if "name_parent_compound" in col or ".mzML" in col or "mzXML" in col
     ]
-    exo_drug_peak_area = feature_annotation_filtered[peak_area_cols]
+    exo_drug_peak_area = feature_annotation[peak_area_cols]
 
     # Group by name_parent_compound and sum
     exo_drug_group = exo_drug_peak_area.groupby("name_parent_compound").sum()
@@ -171,7 +169,7 @@ def create_sankey_plot(feature_annotation_filtered: pd.DataFrame, top_areas: int
     # Join with therapeutic_area and pharmacologic_class
     merge_cols = ["name_parent_compound", "therapeutic_area", "pharmacologic_class"]
     exo_drug_info = (
-        feature_annotation_filtered[merge_cols]
+        feature_annotation[merge_cols]
         .drop_duplicates()
         .groupby("name_parent_compound")
         .first()
@@ -311,7 +309,7 @@ def create_sankey_plot(feature_annotation_filtered: pd.DataFrame, top_areas: int
     return fig
 
 
-def add_sankey_graph(feature_annotation_filtered):
+def add_sankey_graph(feature_annotation):
     """
     Adds the Sankey diagram section to the Streamlit app.
     This function should be called from app.py where session state data is available.
@@ -322,7 +320,7 @@ def add_sankey_graph(feature_annotation_filtered):
     st.header("🌊 Chemical Source and Therapeutic area overview")
 
     # Get the feature annotation data from session state
-    if feature_annotation_filtered is None:
+    if feature_annotation is None:
         st.warning(
             "No feature annotation data available. Please run the analysis first."
         )
@@ -358,7 +356,7 @@ def add_sankey_graph(feature_annotation_filtered):
         try:
             # here we are using the raw feature_annotation table, and the filtering to exclude/include analogs id done
             # inside the function itself.
-            fig = create_sankey_plot(feature_annotation_filtered, top_areas=top_n_areas, top_class=top_n_class,
+            fig = create_sankey_plot(feature_annotation, top_areas=top_n_areas, top_class=top_n_class,
                                      exclude_analogs=(analog_selection == 'Exclude'))
 
             if fig is not None:

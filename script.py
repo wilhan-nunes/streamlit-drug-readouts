@@ -113,7 +113,7 @@ def load_and_merge_annotations(
 
 def generate_feature_annotation(
     annotation_metadata: pd.DataFrame, feature_filtered: pd.DataFrame
-) -> pd.DataFrame:
+) -> (pd.DataFrame, pd.DataFrame):
     """
     Combines filtered feature table with annotated metadata.
     :param annotation_metadata: Merged annotation metadata.
@@ -125,7 +125,13 @@ def generate_feature_annotation(
     feature_filtered["FeatureID"] = feature_filtered["FeatureID"].astype(str)
     annotation_metadata["FeatureID"] = annotation_metadata["FeatureID"].astype(str)
     merged_feature_metadata = annotation_metadata.merge(feature_filtered, on="FeatureID", how="inner")
-    return merged_feature_metadata
+    excluded_mask = merged_feature_metadata["chemical_source"].str.contains("Background|confidence|Endogenous|Food",
+                                                                       case=False, na=False)
+    excluded_features = merged_feature_metadata[excluded_mask]
+    merged_feature_metadata = merged_feature_metadata[
+        ~excluded_mask
+    ]
+    return merged_feature_metadata, excluded_features
 
 
 def stratify_by_drug_class(
@@ -147,15 +153,11 @@ def stratify_by_drug_class(
     if exclude_analogs:
         exo_drug = feature_annotation[
             ~feature_annotation["chemical_source"].str.contains(
-                "Background|confidence|Endogenous|Food|analog", case=False, na=False
+                "analog", case=False, na=False
             )
         ]
     else:
-        exo_drug = feature_annotation[
-            ~feature_annotation["chemical_source"].str.contains(
-                "Background|confidence|Endogenous|Food", case=False, na=False
-            )
-        ]
+        exo_drug = feature_annotation
 
     # Fill NaN values
     exo_drug = exo_drug.copy()
@@ -371,13 +373,13 @@ if __name__ == "__main__":
     # Load and process data
     blank_ids = "blank"  # This must be set to the actual blank IDs
     feature_filtered = load_and_filter_features(
-        quant_file_path, blank_ids, subtract_blanks=True
-    )
+        quant_file_path, blank_ids, subtract_blanks=True, intensity_threshold=threshold,
+        )
 
     annotation_metadata = load_and_merge_annotations(
         annotation_file_path, drug_metadata_file, analog_metadata_file
     )
-    feature_annotation = generate_feature_annotation(
+    feature_annotation, excluded_annotations = generate_feature_annotation(
         annotation_metadata, feature_filtered
     )
     stratified_df = stratify_by_drug_class(feature_annotation, exclude_analogs=True, peak_threshold=threshold)
