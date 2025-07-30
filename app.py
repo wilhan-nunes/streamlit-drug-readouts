@@ -1,4 +1,3 @@
-from gnpsdata import workflow_fbmn
 from streamlit.components.v1 import html
 import streamlit as st
 from utils import display_comparison_statistics, load_example, get_git_short_rev, fbmn_quant_download_wrapper, \
@@ -160,7 +159,7 @@ if st.session_state.get('run_analysis_button', False) or st.session_state.get("r
                     annotation_metadata, feature_filtered
                 )
             else:
-                feature_annotation = st.session_state.get('feature_annotation_edited')
+                feature_annotation = st.session_state.get('feature_annotation')
                 st.success(f'Feature annotation retrieved from session state. Shape: {feature_annotation.shape}')
                 st.session_state["rerun_analysis"] = False
                 excluded_features = st.session_state.default_excluded_features
@@ -321,41 +320,8 @@ if st.session_state.run_analysis:
         st.dataframe(st.session_state.default_excluded_features)
 
     if st.session_state.get('rerun_analysis', False):
-        rows_to_remove = st.session_state.feature_annotation_editor.get("deleted_rows", [])
-        rows_to_edit = st.session_state.feature_annotation_editor.get("edited_rows", {})
-        rows_to_add = st.session_state.feature_annotation_editor.get("added_rows", [])
-
-        with st.spinner("Reprocessing data with edited annotations..."):
-            # Use the edited feature annotation for reanalysis
-            if "feature_annotation_editor" in st.session_state:
-                st.write("using edited feature annotation")
-                if not st.session_state.get('feature_annotation_editor'):
-                    print('Editor empty')
-                # If the user has edited the feature annotation, use that instead of the original
-            else:
-                st.write("using original feature annotation")
-            feature_annotation_edited = feature_annotation.copy()
-
-            # Remove rows safely
-            if rows_to_remove:
-                feature_annotation_edited = feature_annotation_edited.drop(rows_to_remove, errors="ignore")
-
-            # Edit rows
-            for index, values_dict in rows_to_edit.items():
-                for col, value in values_dict.items():
-                    feature_annotation_edited.at[index, col] = value
-
-            # Add new rows if any
-            if rows_to_add:
-                import pandas as pd
-
-                feature_annotation_edited = pd.concat(
-                    [feature_annotation_edited, pd.DataFrame(rows_to_add)], ignore_index=True
-                )
-
-            st.session_state.feature_annotation_edited = feature_annotation_edited
-
-            st.rerun()
+        st.session_state.feature_annotation = edited_df
+        st.rerun()
 
     st.divider()
 
