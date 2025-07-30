@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import requests
 import streamlit as st
 import plotly.express as px
+from gnpsdata import workflow_fbmn
 
 
 def get_git_short_rev():
@@ -90,6 +91,16 @@ def generate_colors(n, base_color=(0.55, 0.85, 0.9)):
         )
         colors.append(rgba)
     return colors
+
+
+@st.cache_data
+def fbmn_quant_download_wrapper(task_id):
+    return workflow_fbmn.get_quantification_dataframe(task_id, gnps2=True)
+
+
+@st.cache_data
+def fbmn_lib_download_wrapper(task_id):
+    return workflow_fbmn.get_library_match_dataframe(task_id, gnps2=True)
 
 
 @st.cache_data

@@ -1,7 +1,8 @@
 from gnpsdata import workflow_fbmn
 from streamlit.components.v1 import html
 import streamlit as st
-from utils import display_comparison_statistics, load_example, get_git_short_rev
+from utils import display_comparison_statistics, load_example, get_git_short_rev, fbmn_quant_download_wrapper, \
+    fbmn_lib_download_wrapper
 
 # Set page configuration
 page_title = "Drug Readout Analysis"
@@ -124,8 +125,8 @@ if st.session_state.get('run_analysis_button', False) or st.session_state.get("r
         if not load_example_data:
             # Retrieve lib_search using the task ID
             with st.spinner("Downloading Task result files..."):
-                quant_file_df = workflow_fbmn.get_quantification_dataframe(task_id, gnps2=True)
-                annotation_file_df = workflow_fbmn.get_library_match_dataframe(task_id, gnps2=True)
+                quant_file_df = fbmn_quant_download_wrapper(task_id)
+                annotation_file_df = fbmn_lib_download_wrapper(task_id)
 
                 st.markdown(
                     f"[:material/download: Input Quant table]"
@@ -160,9 +161,9 @@ if st.session_state.get('run_analysis_button', False) or st.session_state.get("r
                 )
             else:
                 feature_annotation = st.session_state.get('feature_annotation_edited')
-                st.success(f'Feature annotation get from session state. Shape: {feature_annotation.shape}')
+                st.success(f'Feature annotation retrieved from session state. Shape: {feature_annotation.shape}')
                 st.session_state["rerun_analysis"] = False
-                excluded_features = st.session_state.excluded_features
+                excluded_features = st.session_state.default_excluded_features
 
             # Perform analysis (here we use unfiltered feature_annotation, filtering is done by the function)
             stratified_df = stratify_by_drug_class(
