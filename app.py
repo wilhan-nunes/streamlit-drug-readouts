@@ -343,7 +343,7 @@ if st.session_state.run_analysis:
         )
         comparison_tab, table_tab = st.tabs(['Comparison', 'Tables'])
         with comparison_tab:
-            display_comparison_statistics()
+            display_comparison_statistics(st.session_state)
         with table_tab:
             st.subheader("Excluding Drug Analogs")
             st.dataframe(stratified_df.style.map(highlight_yes), use_container_width=True)

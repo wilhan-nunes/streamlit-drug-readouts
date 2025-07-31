@@ -20,11 +20,11 @@ def get_git_short_rev():
         return ".git/ not found"
 
 
-def display_comparison_statistics():
+def display_comparison_statistics(data):
     """Display comparison between with/without analogs if both are available."""
 
-    stratified_df = st.session_state.get("stratified_df")
-    stratified_df_analogs = st.session_state.get("stratified_df_analogs")
+    stratified_df = st.session_state.get("stratified_df") if not data else data.stratified_df
+    stratified_df_analogs = st.session_state.get("stratified_df_analogs") if not data else data.stratified_df_analogs
 
     if stratified_df is None or stratified_df_analogs is None:
         st.info("Run analysis with both analog options to see comparison.")
