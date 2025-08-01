@@ -236,25 +236,31 @@ def display_summary_statistics(data: AnalysisData):
 
         # Define specific drug categories
         specific_categories = {
-            "antibiotics": "🦠 Antibiotics",
-            "antidepressants": "🧠 Antidepressants",
-            "statin": "💊 Statins",
-            "PPI": "➕ PPIs (Proton Pump Inhibitors)",
-            "antihistamine": "🤧 Antihistamines",
-            "antihypertensive": "❤️ Antihypertensives",
-            "Alzheimer": "🧠 Alzheimer's Meds",
-            "antifungal": "🍄 Antifungals",
-            "HIVmed": "🏥 HIV Medications",
+            "antibiotics": ["🦠 Antibiotics",
+                            "Drugs with pharmacologic_class containing 'microbial', 'bacterial', or 'tetracycline'"],
+            "antidepressants": ["🧠 Antidepressants", "Drugs with therapeutic_indication containing 'depression'"],
+            "statin": ["💊 Statins",
+                       "Drugs with pharmacologic_class containing 'statin' or 'HMG-CoA reductase inhibitor'"],
+            "PPI": ["➕ PPIs (Proton Pump Inhibitors)",
+                    "Drugs with pharmacologic_class containing 'proton pump inhibitor'"],
+            "antihistamine": ["🤧 Antihistamines", "Drugs with pharmacologic_class containing 'histamine-1'"],
+            "antihypertensive": ["❤️ Antihypertensives",
+                                 "Drugs with therapeutic_indication containing 'hypertension' AND therapeutic_area containing 'cardiology'"],
+            "Alzheimer": ["🧠 Alzheimer's Meds", "Drugs with therapeutic_indication containing 'Alzheimer'"],
+            "antifungal": ["🍄 Antifungals",
+                           "Drugs with pharmacologic_class containing 'antifungal' OR therapeutic_indication containing 'fungal infection'"],
+            "HIVmed": ["🏥 HIV Medications",
+                       "Drugs with therapeutic_indication containing 'HIV' OR therapeutic_indication containing 'atazanavir'"],
         }
 
         # Calculate category statistics
         category_stats = {}
-        for col_name, display_name in specific_categories.items():
+        for col_name, display_info in specific_categories.items():
             if col_name in data.stratified_df.columns:
                 count = (data.stratified_df[col_name] == "Yes").sum()
                 pct = (count / sample_count) * 100 if sample_count > 0 else 0
                 if pct != 0:
-                    category_stats[display_name] = {"count": count, "percentage": pct}
+                    category_stats[col_name] = {"count": count, "percentage": pct, "display_info": display_info}
 
         # Display specific drug categories
         if category_stats:
@@ -267,16 +273,17 @@ def display_summary_statistics(data: AnalysisData):
                 row_items = list(category_stats.items())[i: i + cols_per_row]
                 for j in range(cols_per_row):
                     if j < len(row_items):
-                        display_name, stats = row_items[j]
+                        col_name, stats = row_items[j]
+                        display_name, help_text = stats["display_info"]
                         with cols[j]:
                             st.metric(
                                 display_name,
                                 f"{stats['count']} ({stats['percentage']:.1f}%)",
-                                help=f"Number of samples containing {display_name.split(' ', 1)[1].lower()}",
+                                help=help_text,
                             )
-                    else:
-                        with cols[j]:
-                            st.empty()
+                else:
+                    with cols[j]:
+                        st.empty()
 
         # Overall summary metrics
         st.subheader("📈 Overall Summary")
