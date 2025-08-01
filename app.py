@@ -303,7 +303,10 @@ def display_feature_annotation_table(data: AnalysisData):
     st.header("🔬 Feature Annotation Table")
     st.write(
         "You can edit the table below and then rerun the analysis with your modifications. "
-        "[Learn how](https://www.youtube.com/watch?v=6tah69LkfxE&list=TLGGKK4Dnf1gepcwNTA2MjAyNQ)"
+        "[:material/help: Learn how](https://www.youtube.com/watch?v=6tah69LkfxE&list=TLGGKK4Dnf1gepcwNTA2MjAyNQ)"
+    )
+    st.markdown(
+        f"[:material/report: Report an annotation issue]({repo_link}/issues/new?assignees=&labels=bug&template=bug_report.md&title=Feature+Annotation+Issue)"
     )
     st.warning(
         "***Before editing** the data, please clear all filters. Filters display results based on the original, unedited table."
