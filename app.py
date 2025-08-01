@@ -312,17 +312,31 @@ def display_summary_statistics(data: AnalysisData):
         upset_class_count = data.class_count_df_analog if upset_analog_inclusion == "Include" else data.class_count_df
         upset_class_count = upset_class_count.sort_values("total_matches", ascending=False)
         top_pharm_classes = ((upset_class_count > 0).astype(int)).sum(axis=0).nlargest(nlarge)
+        total_matches = top_pharm_classes.iloc[0]
+        st.write(total_matches)
         top_pharm_classes.reset_index().rename(
             columns={"class_group": "Pharmacologic Class", 0: "Number of samples containing this class"}
         )
+        percentages = (top_pharm_classes / total_matches * 100).round(1)
         fig = px.bar(
             x=top_pharm_classes.values,
             y=top_pharm_classes.index,
             orientation='h',
             title=f"Top {nlarge} Pharmacologic Classes by Sample Count",
-            labels={"x": "Number of Samples", "y": "Pharmacologic Class"}
+            labels={"x": "Number of Samples", "y": "Pharmacologic Class"},
+            # category_orders={"y": top_pharm_classes.index.tolist()[::-1]}
         )
-        fig.update_layout(height=600, margin=dict(l=200))  # Extra left margin
+        # Add percentage text inside bars (centered)
+        for i, (count, pct) in enumerate(zip(top_pharm_classes.values, percentages.values)):
+            fig.add_annotation(
+                x=count/2,
+                y=i,
+                text=f"{pct}%",
+                showarrow=False,
+                font=dict(color="white", size=11, family="Arial")
+            )
+
+        fig.update_layout(height=600, margin=dict(l=200), yaxis=dict(autorange="reversed"))
         st.plotly_chart(fig, use_container_width=True)
 
 
