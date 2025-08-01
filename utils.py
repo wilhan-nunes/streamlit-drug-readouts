@@ -76,7 +76,7 @@ def display_comparison_statistics(data):
                 title="Drug Detection: Parent Drugs vs With Analogs",
                 barmode="group"
             )
-            fig_comparison.update_layout(xaxis_tickangle=-45)
+            fig_comparison.update_layout(xaxis_tickangle=-45, yaxis_title="Number of samples")
             st.plotly_chart(fig_comparison, use_container_width=True)
 
 
