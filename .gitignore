@@ -1,3 +1,4 @@
 *.R*
 /input_tables/*
 *.tsv
+/ignored_files/

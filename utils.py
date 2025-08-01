@@ -1,11 +1,83 @@
 import colorsys
 import os
-from typing import Literal
-
+import subprocess
+from typing import Literal, List
 import pandas as pd
 import plotly.graph_objects as go
 import requests
 import streamlit as st
+import plotly.express as px
+from gnpsdata import workflow_fbmn
+
+
+def get_git_short_rev():
+    try:
+        with open('.git/logs/HEAD', 'r') as f:
+            last_line = f.readlines()[-1]
+            hash_val = last_line.split()[1]
+        return hash_val[:7]
+    except Exception:
+        return ".git/ not found"
+
+
+def display_comparison_statistics(data):
+    """Display comparison between with/without analogs if both are available."""
+
+    stratified_df = st.session_state.get("stratified_df") if not data else data.stratified_df
+    stratified_df_analogs = st.session_state.get("stratified_df_analogs") if not data else data.stratified_df_analogs
+
+    if stratified_df is None or stratified_df_analogs is None:
+        st.info("Run analysis with both analog options to see comparison.")
+        return
+
+    # Compare detection rates
+    specific_categories = ["antibiotics", "antidepressants", "antihistamine",
+                           "antihypertensive", "Alzheimer", "antifungal", "HIVmed"]
+
+    all_categories = [name for name in stratified_df.columns.to_list() if name != 'Sample']
+    all_categories = set(all_categories + [name for name in stratified_df_analogs.columns.to_list() if name != 'Sample'])
+    selected_categories = st.multiselect(
+        "Select categories to compare:",
+        options=all_categories,
+        default=specific_categories
+    )
+
+    comparison_data = []
+    sample_count = len(stratified_df)
+
+    for category in selected_categories:
+        count_without = (stratified_df[category] == "Yes").sum() if category in stratified_df.columns else 0
+        count_with = (
+                    stratified_df_analogs[category] == "Yes").sum() if category in stratified_df_analogs.columns else 0
+
+        comparison_data.append({
+            "Category": category.replace("_", " ").title(),
+            "Parent Drugs Only": count_without,
+            "With Analogs": count_with,
+            "Difference": count_with - count_without,
+            "% Increase": ((count_with - count_without) / max(count_without, 1)) * 100
+        })
+
+    if comparison_data:
+        comparison_df = pd.DataFrame(comparison_data)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("📊 Detection Comparison")
+            st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+
+        with col2:
+            st.subheader("📈 Impact of Including Analogs")
+            fig_comparison = px.bar(
+                comparison_df,
+                x="Category",
+                y=["Parent Drugs Only", "With Analogs"],
+                title="Drug Detection: Parent Drugs vs With Analogs",
+                barmode="group"
+            )
+            fig_comparison.update_layout(xaxis_tickangle=-45, yaxis_title="Number of samples")
+            st.plotly_chart(fig_comparison, use_container_width=True)
 
 
 def generate_colors(n, base_color=(0.55, 0.85, 0.9)):
@@ -19,6 +91,16 @@ def generate_colors(n, base_color=(0.55, 0.85, 0.9)):
         )
         colors.append(rgba)
     return colors
+
+
+@st.cache_data
+def fbmn_quant_download_wrapper(task_id):
+    return workflow_fbmn.get_quantification_dataframe(task_id, gnps2=True)
+
+
+@st.cache_data
+def fbmn_lib_download_wrapper(task_id):
+    return workflow_fbmn.get_library_match_dataframe(task_id, gnps2=True)
 
 
 @st.cache_data
@@ -47,6 +129,12 @@ def fetch_file(
 
     return output_file_path
 
+def load_example():
+    quant_file_df = pd.read_csv('data/example_quant_file_d6f37a11d90c4f249974280c3fc90108.csv')
+    annotation_file_df = pd.read_csv('data/example_annotation_filed6f37a11d90c4f249974280c3fc90108.tsv', sep='\t')
+
+    return quant_file_df, annotation_file_df
+
 
 def highlight_yes(val):
     if val == "Yes":
@@ -54,20 +142,26 @@ def highlight_yes(val):
     return ""
 
 
-def create_sankey_plot(
-    feature_annotation: pd.DataFrame, top_areas: int = 5, top_class: int = 10
-):
+@st.cache_data
+def create_sankey_plot(feature_annotation: pd.DataFrame, top_areas: int = 5, top_class: int = 10, exclude_analogs=True):
     """
     Create a Sankey plot
 
     Parameters:
-    feature_annotation (pd.DataFrame): Input dataframe with drug detection data
+    feature_annotation_filtered (pd.DataFrame): Input dataframe with drug detection data already filtered to remove 'Food|Endogenous'
     """
 
     # Clean the name_parent_compound column (equivalent to str_trim)
     feature_annotation["name_parent_compound"] = feature_annotation[
         "name_parent_compound"
     ].str.strip()
+
+    if exclude_analogs:
+        feature_annotation = feature_annotation[
+            ~feature_annotation["chemical_source"].str.contains(
+                "analog", case=False, na=False
+            )
+        ]
 
     # Select columns containing name_parent_compound and file extensions
     peak_area_cols = [
@@ -213,20 +307,21 @@ def create_sankey_plot(
     )
 
     fig = go.Figure(data=[sankey_trace])
-
+    analogs_str = "Analogs excluded" if exclude_analogs else "Analogs included"
     fig.update_layout(
-        title_text="Drug Detection Sankey Diagram",
+        title_text=f"Drug Detection Sankey Diagram ({analogs_str})<br>"
+                   f"<sub>Therapeutic area → Pharmacologic Class → Drug Name</sub>",
         font_size=14,
         font_family="Arial",
         height=1000,
         font=dict(color="white"),
-        margin=dict(l=40, r=40, t=40, b=40),
+        margin=dict(l=40, r=40, t=70, b=40),
     )
 
     return fig
 
 
-def add_sankey_graph():
+def add_sankey_graph(feature_annotation):
     """
     Adds the Sankey diagram section to the Streamlit app.
     This function should be called from app.py where session state data is available.
@@ -237,8 +332,6 @@ def add_sankey_graph():
     st.header("🌊 Chemical Source and Therapeutic area overview")
 
     # Get the feature annotation data from session state
-    feature_annotation = st.session_state.get("feature_annotation")
-
     if feature_annotation is None:
         st.warning(
             "No feature annotation data available. Please run the analysis first."
@@ -246,12 +339,12 @@ def add_sankey_graph():
         return
 
     # User input for number of top therapeutic area
-    col1, col2 = st.columns([1, 1])
+    col1, col2, col3 = st.columns([1, 1, 1])
 
     with col1:
         top_n_areas = st.number_input(
             "Top Therapeutic Areas to show:",
-            min_value=5,
+            min_value=1,
             max_value=25,
             value=5,
             step=1,
@@ -261,30 +354,41 @@ def add_sankey_graph():
     with col2:
         top_n_class = st.number_input(
             "Top Pharmacologic Classes to show:",
-            min_value=5,
+            min_value=1,
             max_value=25,
             value=10,
             step=1,
             help="Select how many top pharmacologic classes to include in the Sankey diagram",
         )
+    with col3:
+        analog_selection = st.radio("Analogs", options=['Include', 'Exclude'], horizontal=True, index=1)
 
     # Create and display the Sankey diagram
     with st.spinner("Generating Sankey diagram..."):
         try:
-            fig = create_sankey_plot(
-                feature_annotation, top_areas=top_n_areas, top_class=top_n_class
-            )
+            # here we are using the raw feature_annotation table, and the filtering to exclude/include analogs id done
+            # inside the function itself.
+            fig = create_sankey_plot(feature_annotation, top_areas=top_n_areas, top_class=top_n_class,
+                                     exclude_analogs=(analog_selection == 'Exclude'))
 
             if fig is not None:
                 st.plotly_chart(fig, use_container_width=True)
+                svg_bytes = fig.to_image(format="svg")
+                st.download_button(
+                    label=":material/download: Download Plot as SVG",
+                    data=svg_bytes,
+                    file_name=f"sankey_plot.svg",
+                    mime="image/svg+xml",  # Set the MIME type to SVG
+                    key='sankey_plot_download'
+                )
 
                 # Add interpretation help
                 with st.expander("How to interpret this Sankey diagram"):
                     st.write(
                         """
-                    - **Left nodes (Pharmacological Areas)**: Shows the different sources of detected compounds
-                    - **Center nodes (Therapeutic Area)**: Shows the therapeutic areas
-                    - **Right nodes (Compound name)**: Shows the compound names
+                    - **Left nodes (Therapeutic Area)**: Shows the therapeutic areas in which the drugs are used
+                    - **Center nodes (Pharmacological Class)**: Indicates the drug classes or mechanisms of action.
+                    - **Right nodes (Drug name)**: Shows the drugs/compounds names
                     - **Flow width**: The thickness of each flow represents the **number counts** for the connecting nodes
                     """
                     )
@@ -298,6 +402,101 @@ def add_sankey_graph():
             st.error(f"Error generating Sankey diagram: {str(e)}")
             st.info("Please check your data format and try again.")
 
+
+def add_df_and_filtering(df, key_prefix:str, default_cols: List = None):
+    # Session state for tracking number of filters
+    if f"{key_prefix}_filter_count" not in st.session_state:
+        st.session_state[f"{key_prefix}_filter_count"] = 0
+
+    add_col, remove_col, _, _ = st.columns(4)
+    with add_col:
+        # Button to add more filter fields
+        if st.button("➕ Add Filter Field", use_container_width=True, key=f"{key_prefix}_add_btn"):
+            st.session_state[f"{key_prefix}_filter_count"] += 1
+    with remove_col:
+        if st.button("➖ Remove Filter Field", use_container_width=True, key=f"{key_prefix}_rmv_btn"):
+            st.session_state[f"{key_prefix}_filter_count"] -= 1
+
+    filtered_df = df.copy()
+
+    # Generate filter fields
+    for i in range(st.session_state[f"{key_prefix}_filter_count"]):
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            if i == 0:
+                st.markdown("**Filter Column**")
+            selected_col = st.selectbox(
+                f"Column {i+1}", filtered_df.columns, key=f"{key_prefix}_col_select_{i}"
+            )
+        with col2:
+            if i == 0:
+                st.markdown("**Search String**")
+            search_term = st.text_input(
+                f"Contains (Column {i+1})", key=f"{key_prefix}_search_input_{i}"
+            )
+
+        if selected_col and search_term:
+            filtered_df = filtered_df[filtered_df[selected_col].str.contains(search_term, case=False, na=False)]
+
+    # Show result
+    st.markdown("### 🔎 Filtered Results")
+    st.write(f"Total results: {len(filtered_df)}")
+    all_cols = filtered_df.columns
+    if default_cols:
+        with st.expander('Cols to show'):
+            cols_to_show = st.multiselect("Columns to show", options=all_cols, default=default_cols,
+                                          label_visibility='collapsed')
+    else:
+        cols_to_show = all_cols
+
+    return filtered_df[cols_to_show]
+
+
+@st.cache_data
+def create_upset_plot(upset_class_count, n_top_classes, max_samples, upset_analog_inclusion):
+    """Create and display UpSet plot"""
+    import matplotlib.pyplot as plt
+    from upsetplot import UpSet, from_indicators
+    import io
+
+
+    # Prepare binary matrix for top classes
+    top_classes = upset_class_count.sum(axis=0).nlargest(n_top_classes + 1).index.tolist()
+    top_classes.remove("total_matches")
+
+    # Create binary matrix (presence/absence)
+    binary_matrix = (upset_class_count[top_classes] > 0).astype(int)
+    binary_matrix.index.name = "Sample"
+
+    # Limit number of samples
+    limited_matrix = binary_matrix.head(max_samples)
+    limited_matrix = limited_matrix[limited_matrix.sum(axis=1) > 0]
+
+    if len(limited_matrix) == 0:
+        st.warning("No samples found with detections in the selected drug classes. Try adjusting the parameters.")
+    else:
+        # Create UpSet plot
+        upset_data = from_indicators(top_classes, limited_matrix.astype(bool))
+
+        upset_fig, ax = plt.subplots(figsize=(10, 6))
+        ax.set_axis_off()
+        UpSet(upset_data, subset_size="count", sort_by="cardinality", show_counts=True).plot(upset_fig)
+        upset_fig.suptitle(
+            f"UpSet Plot for top {n_top_classes} classes and top {max_samples} samples\n(Analogs {upset_analog_inclusion}d)",
+            y=1.05,
+        )
+
+        for ax_ in upset_fig.axes:
+            ax_.grid(axis="x", visible=False)
+
+        # Convert to SVG
+        buf = io.StringIO()
+        upset_fig.savefig(buf, format="svg", bbox_inches="tight")
+        svg = buf.getvalue()
+        buf.close()
+        plt.close(upset_fig)
+
+        return svg
 
 if __name__ == "__main__":
     # Example usage

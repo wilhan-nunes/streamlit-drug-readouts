@@ -4,3 +4,5 @@ requests
 matplotlib
 upsetplot
 plotly
+kaleido
+git+https://github.com/Wang-Bioinformatics-Lab/GNPSDataPackage.git

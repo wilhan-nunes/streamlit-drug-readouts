@@ -4,31 +4,36 @@ import pandas as pd
 
 
 def load_and_filter_features(
-    file_path: str,
-    blank_ids: List[str] | None = None,
+    features_data: str | pd.DataFrame,
+    blank_ids: str | None = None,
     intensity_threshold: int = 10000,
     file_types: List[str] = ["mzML", "mzXML"],
     subtract_blanks: bool = False,
 ) -> pd.DataFrame:
     """
     Load and filter features from a CSV file based on intensity threshold and file types.
-    :param file_path: Path to the CSV file containing features.
+    :param subtract_blanks: whether to subtract the blank samples or not
+    :param features_data: Path to the CSV file OR dataframe containing features
     :param intensity_threshold: Basically only trust detections with peak area above this number
     :param file_types: List of possible file types to filter the features.
     :param blank_ids: List of substrings to identify blank or control columns.
     :return: pd.Dataframe: Filtered features intensity table.
     """
-    feature = pd.read_csv(file_path)
+    if isinstance(features_data, str):
+        feature = pd.read_csv(features_data)
+    elif isinstance(features_data, pd.DataFrame):
+        feature = features_data.copy()
+
     feature_filtered = feature.set_index("row ID").filter(regex="|".join(file_types))
     feature_filtered[feature_filtered < intensity_threshold] = 0
     if subtract_blanks:
         # Optionally perform blank subtraction if needed
         # Identify blank and sample columns based on their names
         feature_blank = feature_filtered.loc[
-            :, feature_filtered.columns.str.contains("|".join(blank_ids))
+            :, feature_filtered.columns.str.contains(blank_ids.strip(), case=False)
         ]
         feature_sample = feature_filtered.loc[
-            :, ~feature_filtered.columns.str.contains("|".join(blank_ids))
+            :, ~feature_filtered.columns.str.contains(blank_ids.strip(), case=False)
         ]
 
         # Ensure row indices match
@@ -53,16 +58,20 @@ def load_and_filter_features(
 
 
 def load_and_merge_annotations(
-    annotation_file: str, druglib_file: str, analoglib_file: str
+    fbmn_annotation_data: str | pd.DataFrame, druglib_file: str, analoglib_file: str
 ) -> pd.DataFrame:
     """
     Loads and merges annotations with drug library metadata.
-    :param annotation_file: Path to the annotation TSV file.
+    :param fbmn_annotation_data: Path to the annotation TSV file.
     :param druglib_file: Path to the parent drug metadata CSV.
     :param analoglib_file: Path to the drug analog metadata CSV.
     :return: pd.DataFrame: Annotation table merged with metadata.
     """
-    annotation = pd.read_csv(annotation_file, sep="\t")
+    if isinstance(fbmn_annotation_data, str):
+        annotation = pd.read_csv(fbmn_annotation_data, sep="\t")
+    elif isinstance(fbmn_annotation_data, pd.DataFrame):
+        annotation = fbmn_annotation_data
+
     annotation_filtered = annotation[["#Scan#", "SpectrumID", "Compound_Name"]]
     annotation_filtered.columns = ["FeatureID", "SpectrumID", "Compound_Name"]
 
@@ -104,7 +113,7 @@ def load_and_merge_annotations(
 
 def generate_feature_annotation(
     annotation_metadata: pd.DataFrame, feature_filtered: pd.DataFrame
-) -> pd.DataFrame:
+) -> (pd.DataFrame, pd.DataFrame):
     """
     Combines filtered feature table with annotated metadata.
     :param annotation_metadata: Merged annotation metadata.
@@ -115,11 +124,19 @@ def generate_feature_annotation(
     feature_filtered = feature_filtered.rename(columns={"row ID": "FeatureID"})
     feature_filtered["FeatureID"] = feature_filtered["FeatureID"].astype(str)
     annotation_metadata["FeatureID"] = annotation_metadata["FeatureID"].astype(str)
-    return annotation_metadata.merge(feature_filtered, on="FeatureID", how="inner")
+    merged_feature_metadata = annotation_metadata.merge(feature_filtered, on="FeatureID", how="inner")
+    excluded_mask = merged_feature_metadata["chemical_source"].str.contains("Background|confidence|Endogenous|Food",
+                                                                       case=False, na=False)
+    excluded_features = merged_feature_metadata[excluded_mask]
+    merged_feature_metadata = merged_feature_metadata[
+        ~excluded_mask
+    ]
+    return merged_feature_metadata, excluded_features
 
 
 def stratify_by_drug_class(
     feature_annotation: pd.DataFrame,
+    peak_threshold: int,
     column_pattern: str = r".*\.mzML|.*\.mzXML",
     exclude_analogs: bool = False,
 ) -> pd.DataFrame:
@@ -136,15 +153,11 @@ def stratify_by_drug_class(
     if exclude_analogs:
         exo_drug = feature_annotation[
             ~feature_annotation["chemical_source"].str.contains(
-                "Background|confidence|Endogenous|Food|analog", case=False, na=False
+                "analog", case=False, na=False
             )
         ]
     else:
-        exo_drug = feature_annotation[
-            ~feature_annotation["chemical_source"].str.contains(
-                "Background|confidence|Endogenous|Food", case=False, na=False
-            )
-        ]
+        exo_drug = feature_annotation
 
     # Fill NaN values
     exo_drug = exo_drug.copy()
@@ -218,10 +231,9 @@ def stratify_by_drug_class(
 
     # 6. Antihypertensives
     antihypertensives = exo_drug[
-        exo_drug["therapeutic_indication"].str.contains(
-            "hypertension", case=False, na=False
-        )
-    ]
+        (exo_drug["therapeutic_indication"].str.contains("hypertension", case=False, na=False)) &
+        (exo_drug["therapeutic_area"].str.contains("cardiology", case=False, na=False))
+        ]
     agg_antihypertensives = antihypertensives[sample_columns].sum().to_frame().T
     agg_antihypertensives.index = ["antihypertensive"]
 
@@ -295,8 +307,8 @@ def stratify_by_drug_class(
     final_df = pd.concat(non_empty_dfs, sort=False)
 
     # Convert to binary (True/False) then to Yes/No
-    final_df_TF = final_df > 0
-    final_df_TF = final_df_TF.T.map(lambda x: "Yes" if x else "No")
+    final_df_TF = final_df >= peak_threshold
+    final_df_TF = final_df_TF.T.map(lambda x: "Yes" if x  else "No")
     final_df_TF = final_df_TF.reset_index().rename(columns={"index": "Sample"})
 
     return final_df_TF
@@ -306,13 +318,13 @@ def count_drug_class_occurrences(
     feature_annotation: pd.DataFrame,
     class_column: str = "pharmacologic_class",
     file_extensions: List[str] = ["mzML", "mzXML"],
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Counts the number of times each drug class appears in each sample.
     :param feature_annotation: Annotated feature intensity data.
     :param class_column: Column name for drug class (e.g., 'pharmacologic_class').
     :param file_extensions: File extensions used to select intensity columns.
-    :return: pd.DataFrame: DataFrame with sample-wise counts for each class.
+    :return: pd.DataFrame: two DataFrames with sample-wise counts for each class, without and with analogs. (in this order)
     """
     pattern = "|".join(file_extensions)
     df = feature_annotation.copy()
@@ -326,48 +338,66 @@ def count_drug_class_occurrences(
     df_class_binary[df_class_binary.columns[1:]] = (
         df_class_binary[df_class_binary.columns[1:]].gt(0).astype(int)
     )
-    return df_class_binary.groupby("class_group").sum().T
-
+    # Without analogs
+    df_no_analogs = feature_annotation[~feature_annotation["chemical_source"].str.contains("analog", case=False, na=False)].copy()
+    df_no_analogs[class_column] = df_no_analogs[class_column].fillna("NA")
+    df_no_analogs = df_no_analogs[df_no_analogs[class_column] != "NA"]
+    df_no_analogs = df_no_analogs[df_no_analogs[class_column] != "no_match"]
+    df_no_analogs = df_no_analogs.assign(class_group=df_no_analogs[class_column].str.split("\\|")).explode("class_group")
+    df_no_analogs = df_no_analogs[df_no_analogs["class_group"].notna()]
+    df_class_no_analogs = df_no_analogs[["class_group"] + df_no_analogs.filter(regex=pattern).columns.tolist()]
+    df_class_binary_no_analogs = df_class_no_analogs.copy()
+    df_class_binary_no_analogs[df_class_binary_no_analogs.columns[1:]] = (
+        df_class_binary_no_analogs[df_class_binary_no_analogs.columns[1:]].gt(0).astype(int)
+    )
+    return (
+        df_class_binary_no_analogs.groupby("class_group").sum().T,
+        df_class_binary.groupby("class_group").sum().T,
+    )
 
 if __name__ == "__main__":
     # --- User-Defined Parameters Section ---
     # This section allows the user to modify parameters for running the script as a standalone file.
-    from utils import fetch_file
+    from gnpsdata import workflow_fbmn
 
     ## Setup file paths and task IDs
-    task_id = "d6f37a11d90c4f249974280c3fc90108"
-    quant_file_path = fetch_file(task_id, "quant_table.csv", type="quant_table")
-    annotation_file_path = fetch_file(
-        task_id, "annotations.tsv", type="annotation_table"
-    )
+    task_id = "4d99fc25d84143bdbbf2dd07bf044e5e"
+    threshold = 10000
+    quant_file_path = workflow_fbmn.get_quantification_dataframe(task_id, gnps2=True)
+    annotation_file_path = workflow_fbmn.get_library_match_dataframe(task_id, gnps2=True)
+
+
     drug_metadata_file = "data/GNPS_Drug_Library_Metadata_Drugs.csv"
     analog_metadata_file = "data/GNPS_Drug_Library_Metadata_Drug_Analogs_Updated.csv"
 
     # Load and process data
-    blank_ids = ["QC"]  # This should be set to the actual blank IDs if available
+    blank_ids = "blank"  # This must be set to the actual blank IDs
     feature_filtered = load_and_filter_features(
-        quant_file_path, blank_ids, subtract_blanks=False
-    )
+        quant_file_path, blank_ids, subtract_blanks=True, intensity_threshold=threshold,
+        )
 
     annotation_metadata = load_and_merge_annotations(
         annotation_file_path, drug_metadata_file, analog_metadata_file
     )
-    feature_annotation = generate_feature_annotation(
+    feature_annotation, excluded_annotations = generate_feature_annotation(
         annotation_metadata, feature_filtered
     )
-    stratified_df = stratify_by_drug_class(feature_annotation, exclude_analogs=True)
+    stratified_df = stratify_by_drug_class(feature_annotation, exclude_analogs=True, peak_threshold=threshold)
     stratified_df_analogs = stratify_by_drug_class(
-        feature_annotation, exclude_analogs=False
+        feature_annotation, exclude_analogs=False, peak_threshold=threshold
     )
 
     # adding a summary of drug class occurrence per sample
-    class_count_df = count_drug_class_occurrences(
+    class_count_df, class_count_df_analog = count_drug_class_occurrences(
         feature_annotation, class_column="pharmacologic_class"
     )
     class_count_df["total_matches"] = class_count_df.sum(axis=1)
+    class_count_df_analog["total_matches"] = class_count_df_analog.sum(axis=1)
+
+
     class_count_df_sorted = class_count_df.sort_values("total_matches", ascending=False)
 
-    # Save the stratified DataFrame to a CSV file
-    stratified_df.to_csv("stratified.tsv", sep="\t", index=False)
-    stratified_df_analogs.to_csv("stratified_analogs.tsv", sep="\t", index=False)
-    feature_annotation.to_csv("feature_annotation.tsv", sep="\t", index=False)
+    # # Save the stratified DataFrame to a CSV file
+    # stratified_df.to_csv("stratified.tsv", sep="\t", index=False)
+    # stratified_df_analogs.to_csv("stratified_analogs.tsv", sep="\t", index=False)
+    # feature_annotation.to_csv("feature_annotation.tsv", sep="\t", index=False)
