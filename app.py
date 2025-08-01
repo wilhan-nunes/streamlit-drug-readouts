@@ -4,6 +4,7 @@ import streamlit as st
 from utils import display_comparison_statistics, load_example, get_git_short_rev
 from dataclasses import dataclass
 from typing import Optional
+import plotly.express as px
 import pandas as pd
 from script import *
 import warnings
@@ -193,11 +194,11 @@ def process_analysis_data(quant_file_df, annotation_file_df, config, data: Analy
 
         if not st.session_state.get("rerun_analysis", False):
             print('[process_analysis_data] generating feature_annotation...')
-            _feature_annotation, excluded_features = generate_feature_annotation(_annotation_metadata, feature_filtered)
+            _feature_annotation, _excluded_features = generate_feature_annotation(_annotation_metadata, feature_filtered)
         else:
             print('[process_analysis_data] Rerun - reading feature_annotation from session...')
             _feature_annotation = data.feature_annotation
-            excluded_features = data.default_excluded_features
+            _excluded_features = data.default_excluded_features
             st.success(f'Feature annotation retrieved from session state. Shape: {_feature_annotation.shape}')
             st.session_state["rerun_analysis"] = False
 
@@ -222,7 +223,7 @@ def process_analysis_data(quant_file_df, annotation_file_df, config, data: Analy
         data.stratified_df_analogs = _stratified_df_analogs
         data.class_count_df = _class_count_df
         data.class_count_df_analog = _class_count_df_analog
-        data.default_excluded_features = excluded_features
+        data.default_excluded_features = _excluded_features
         data.save_to_session()
         print('[process_analysis_data]  saved to session...')
 
@@ -230,77 +231,99 @@ def process_analysis_data(quant_file_df, annotation_file_df, config, data: Analy
 def display_summary_statistics(data: AnalysisData):
     """Display drug detection summary statistics"""
     st.header("📊 Drug Detection Summary Statistics")
+    tab1, tab2 = st.tabs(["📈 Summary Metrics", "📊 Top Pharmacological Classes"])
+    with tab1:
+        with st.spinner("Calculating summary..."):
+            sample_count = len(data.stratified_df)
 
-    with st.spinner("Calculating summary..."):
-        sample_count = len(data.stratified_df)
+            # Define specific drug categories
+            specific_categories = {
+                "antibiotics": ["🦠 Antibiotics",
+                                "Drugs with pharmacologic_class containing 'microbial', 'bacterial', or 'tetracycline'"],
+                "antidepressants": ["🧠 Antidepressants", "Drugs with therapeutic_indication containing 'depression'"],
+                "statin": ["💊 Statins",
+                           "Drugs with pharmacologic_class containing 'statin' or 'HMG-CoA reductase inhibitor'"],
+                "PPI": ["➕ PPIs (Proton Pump Inhibitors)",
+                        "Drugs with pharmacologic_class containing 'proton pump inhibitor'"],
+                "antihistamine": ["🤧 Antihistamines", "Drugs with pharmacologic_class containing 'histamine-1'"],
+                "antihypertensive": ["❤️ Antihypertensives",
+                                     "Drugs with therapeutic_indication containing 'hypertension' AND therapeutic_area containing 'cardiology'"],
+                "Alzheimer": ["🧠 Alzheimer's Meds", "Drugs with therapeutic_indication containing 'Alzheimer'"],
+                "antifungal": ["🍄 Antifungals",
+                               "Drugs with pharmacologic_class containing 'antifungal' OR therapeutic_indication containing 'fungal infection'"],
+                "HIVmed": ["🏥 HIV Medications",
+                           "Drugs with therapeutic_indication containing 'HIV' OR therapeutic_indication containing 'atazanavir'"],
+            }
 
-        # Define specific drug categories
-        specific_categories = {
-            "antibiotics": ["🦠 Antibiotics",
-                            "Drugs with pharmacologic_class containing 'microbial', 'bacterial', or 'tetracycline'"],
-            "antidepressants": ["🧠 Antidepressants", "Drugs with therapeutic_indication containing 'depression'"],
-            "statin": ["💊 Statins",
-                       "Drugs with pharmacologic_class containing 'statin' or 'HMG-CoA reductase inhibitor'"],
-            "PPI": ["➕ PPIs (Proton Pump Inhibitors)",
-                    "Drugs with pharmacologic_class containing 'proton pump inhibitor'"],
-            "antihistamine": ["🤧 Antihistamines", "Drugs with pharmacologic_class containing 'histamine-1'"],
-            "antihypertensive": ["❤️ Antihypertensives",
-                                 "Drugs with therapeutic_indication containing 'hypertension' AND therapeutic_area containing 'cardiology'"],
-            "Alzheimer": ["🧠 Alzheimer's Meds", "Drugs with therapeutic_indication containing 'Alzheimer'"],
-            "antifungal": ["🍄 Antifungals",
-                           "Drugs with pharmacologic_class containing 'antifungal' OR therapeutic_indication containing 'fungal infection'"],
-            "HIVmed": ["🏥 HIV Medications",
-                       "Drugs with therapeutic_indication containing 'HIV' OR therapeutic_indication containing 'atazanavir'"],
-        }
+            # Calculate category statistics
+            category_stats = {}
+            for col_name, display_info in specific_categories.items():
+                if col_name in data.stratified_df.columns:
+                    count = (data.stratified_df[col_name] == "Yes").sum()
+                    pct = (count / sample_count) * 100 if sample_count > 0 else 0
+                    if pct != 0:
+                        category_stats[col_name] = {"count": count, "percentage": pct, "display_info": display_info}
 
-        # Calculate category statistics
-        category_stats = {}
-        for col_name, display_info in specific_categories.items():
-            if col_name in data.stratified_df.columns:
-                count = (data.stratified_df[col_name] == "Yes").sum()
-                pct = (count / sample_count) * 100 if sample_count > 0 else 0
-                if pct != 0:
-                    category_stats[col_name] = {"count": count, "percentage": pct, "display_info": display_info}
+            # Display specific drug categories
+            if category_stats:
+                # st.subheader("🎯 Specific Drug Categories")
+                cols_per_row = 3
+                num_categories = len(category_stats)
 
-        # Display specific drug categories
-        if category_stats:
-            # st.subheader("🎯 Specific Drug Categories")
-            cols_per_row = 3
-            num_categories = len(category_stats)
-
-            for i in range(0, num_categories, cols_per_row):
-                cols = st.columns(cols_per_row)
-                row_items = list(category_stats.items())[i: i + cols_per_row]
-                for j in range(cols_per_row):
-                    if j < len(row_items):
-                        col_name, stats = row_items[j]
-                        display_name, help_text = stats["display_info"]
+                for i in range(0, num_categories, cols_per_row):
+                    cols = st.columns(cols_per_row)
+                    row_items = list(category_stats.items())[i: i + cols_per_row]
+                    for j in range(cols_per_row):
+                        if j < len(row_items):
+                            col_name, stats = row_items[j]
+                            display_name, help_text = stats["display_info"]
+                            with cols[j]:
+                                st.metric(
+                                    display_name,
+                                    f"{stats['count']} ({stats['percentage']:.1f}%)",
+                                    help=help_text,
+                                )
+                    else:
                         with cols[j]:
-                            st.metric(
-                                display_name,
-                                f"{stats['count']} ({stats['percentage']:.1f}%)",
-                                help=help_text,
-                            )
-                else:
-                    with cols[j]:
-                        st.empty()
+                            st.empty()
 
-        # Overall summary metrics
-        st.subheader("📈 Overall Summary")
-        col1, col2, col3 = st.columns(3)
+            # Overall summary metrics
+            st.subheader("📈 Overall Summary")
+            col1, col2, col3 = st.columns(3)
 
+            with col1:
+                total_drug_columns = len([col for col in data.stratified_df.columns if col != "Sample"])
+                st.metric("Total Drug Categories", total_drug_columns)
+
+            with col2:
+                drug_columns = [col for col in data.stratified_df.columns if col != "Sample"]
+                samples_with_drugs = (data.stratified_df[drug_columns] == "Yes").any(axis=1).sum()
+                drug_detection_pct = (samples_with_drugs / sample_count) * 100 if sample_count > 0 else 0
+                st.metric("Samples with Any Drug", f"{samples_with_drugs} ({drug_detection_pct:.1f}%)")
+
+            with col3:
+                st.metric("Total Samples", sample_count)
+    with tab2:
+        col1, col2 = st.columns([1, 2])
         with col1:
-            total_drug_columns = len([col for col in data.stratified_df.columns if col != "Sample"])
-            st.metric("Total Drug Categories", total_drug_columns)
-
+            upset_analog_inclusion = st.radio("Drug Analogs", options=['Include', 'Exclude'], index=1, horizontal=True)
         with col2:
-            drug_columns = [col for col in data.stratified_df.columns if col != "Sample"]
-            samples_with_drugs = (data.stratified_df[drug_columns] == "Yes").any(axis=1).sum()
-            drug_detection_pct = (samples_with_drugs / sample_count) * 100 if sample_count > 0 else 0
-            st.metric("Samples with Any Drug", f"{samples_with_drugs} ({drug_detection_pct:.1f}%)")
-
-        with col3:
-            st.metric("Total Samples", sample_count)
+            nlarge = st.number_input("Number of Top Classes to Display", min_value=1, value=20, key="top_classes_summary")
+        upset_class_count = data.class_count_df_analog if upset_analog_inclusion == "Include" else data.class_count_df
+        upset_class_count = upset_class_count.sort_values("total_matches", ascending=False)
+        top_pharm_classes = ((upset_class_count > 0).astype(int)).sum(axis=0).nlargest(nlarge)
+        top_pharm_classes.reset_index().rename(
+            columns={"class_group": "Pharmacologic Class", 0: "Number of samples containing this class"}
+        )
+        fig = px.bar(
+            x=top_pharm_classes.values,
+            y=top_pharm_classes.index,
+            orientation='h',
+            title=f"Top {nlarge} Pharmacologic Classes by Sample Count",
+            labels={"x": "Number of Samples", "y": "Pharmacologic Class"}
+        )
+        fig.update_layout(height=600, margin=dict(l=200))  # Extra left margin
+        st.plotly_chart(fig, use_container_width=True)
 
 
 def display_feature_annotation_table(data: AnalysisData):
