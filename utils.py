@@ -142,6 +142,10 @@ def highlight_yes(val):
     return ""
 
 
+def highlight_low_confidence(row):
+    return ['background-color: #fec4c4' if row['MatchedPeaks'] <= 2 and row['CosineScore'] < 0.9 else '' for _ in row]
+
+
 @st.cache_data
 def create_sankey_plot(feature_annotation: pd.DataFrame, top_areas: int = 5, top_class: int = 10, exclude_analogs=True):
     """

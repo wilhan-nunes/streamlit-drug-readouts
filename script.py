@@ -72,8 +72,8 @@ def load_and_merge_annotations(
     elif isinstance(fbmn_annotation_data, pd.DataFrame):
         annotation = fbmn_annotation_data
 
-    annotation_filtered = annotation[["#Scan#", "SpectrumID", "Compound_Name"]]
-    annotation_filtered.columns = ["FeatureID", "SpectrumID", "Compound_Name"]
+    annotation_filtered = annotation[["#Scan#", "SpectrumID", "Compound_Name", "MQScore", "SharedPeaks"]]
+    annotation_filtered.columns = ["FeatureID", "SpectrumID", "Compound_Name", "CosineScore", "MatchedPeaks"]
 
     druglib = pd.read_csv(
         druglib_file,

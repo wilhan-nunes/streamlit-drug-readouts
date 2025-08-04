@@ -1,7 +1,7 @@
 from gnpsdata import workflow_fbmn
 from streamlit.components.v1 import html
 import streamlit as st
-from utils import display_comparison_statistics, load_example, get_git_short_rev
+from utils import display_comparison_statistics, load_example, get_git_short_rev, highlight_low_confidence
 from dataclasses import dataclass
 from typing import Optional
 import plotly.express as px
@@ -138,6 +138,7 @@ def setup_sidebar():
         st.subheader("Contributors")
         st.markdown("""
         - [Haoqi (Nina) Zhao PhD](https://scholar.google.com/citations?user=xW9jBO0AAAAJ) - UC San Diego
+        - [Kine Eide Kvitne PhD](https://scholar.google.com/citations?user=0nP4ie4AAAAJ) - UC San Diego
         - [Wilhan Nunes PhD](https://scholar.google.com/citations?user=4cPVoeIAAAAJ) - UC San Diego
         - [Mingxun Wang PhD](https://www.cs.ucr.edu/~mingxunw/) - UC Riverside
         """)
@@ -350,16 +351,19 @@ def display_feature_annotation_table(data: AnalysisData):
         f"[:material/report: Report an annotation issue]({repo_link}/issues/new?assignees=&labels=bug&template=bug_report.md&title=Feature+Annotation+Issue)"
     )
     st.warning(
-        "***Before editing** the data, please clear all filters. Filters display results based on the original, unedited table."
+        "***Before editing** the data, please clear all filters.*\n\n"
+        ":red[**Low confidence**]: Annotations with low confidence (i.e., cosine score < 0.9, matched peaks <= 2) are highlighted in red. "
     )
 
     filtered_df = add_df_and_filtering(data.feature_annotation, "feature_annotation_filtered")
+    # Highlighting low confidence annotations (possibly a slowing step)
     edited_df = st.data_editor(
-        filtered_df,
+        filtered_df.style.apply(highlight_low_confidence, axis=1),
         key="feature_annotation_editor",
         use_container_width=True,
         num_rows="dynamic",
         height=400,
+        disabled=["CosineScore", "MatchedPeaks"]
     )
 
     # Rerun button
