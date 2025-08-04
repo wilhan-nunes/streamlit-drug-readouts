@@ -557,18 +557,6 @@ def display_upset_plot(upset_fig, error_message=None):
 
 def display_drug_class_tables(upset_class_count, upset_analog_inclusion):
     """Display drug class summary tables"""
-    st.subheader(f"Top Detected Drug Classes (Analogs {upset_analog_inclusion}d)")
-
-    nlarge = st.number_input("Number of Top Classes to Display", min_value=1, value=10, key="top_classes_input")
-    top_pharm_classes = ((upset_class_count > 0).astype(int)).sum(axis=0).nlargest(nlarge)
-
-    st.dataframe(
-        top_pharm_classes.reset_index().rename(
-            columns={"class_group": "Pharmacologic Class", 0: "Number of samples containing this class"}
-        ),
-        use_container_width=True,
-    )
-
     st.subheader("Drug Class Summary by Sample")
     class_count_df_display = upset_class_count.copy()
     class_count_df_display.index = class_count_df_display.index.str.replace(r"\.(mzML|mzXML) Peak area", "", regex=True)
