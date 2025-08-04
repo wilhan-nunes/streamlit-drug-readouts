@@ -255,37 +255,35 @@ def display_summary_statistics(data: AnalysisData):
                            "Drugs with therapeutic_indication containing 'HIV' OR therapeutic_indication containing 'atazanavir'"],
             }
 
-            # Calculate category statistics
+            # Calculate counts and percentages for specific categories
             category_stats = {}
-            for col_name, display_info in specific_categories.items():
+            for col_name, display_name in specific_categories.items():
                 if col_name in data.stratified_df.columns:
                     count = (data.stratified_df[col_name] == "Yes").sum()
                     pct = (count / sample_count) * 100 if sample_count > 0 else 0
-                    if pct != 0:
-                        category_stats[col_name] = {"count": count, "percentage": pct, "display_info": display_info}
+                    category_stats[display_name[0]] = {"count": count, "percentage": pct, "description": display_name[1]}
+                    # sort
 
-            # Display specific drug categories
+            # Display specific drug categories in a grid
             if category_stats:
-                # st.subheader("🎯 Specific Drug Categories")
-                cols_per_row = 3
+                st.subheader("🎯 Specific Drug Categories", help="Classes with a long dash (—) indicate no detection.")
+
+                # Create columns dynamically based on number of categories
                 num_categories = len(category_stats)
+                cols_per_row = 3
 
                 for i in range(0, num_categories, cols_per_row):
-                    cols = st.columns(cols_per_row)
-                    row_items = list(category_stats.items())[i: i + cols_per_row]
-                    for j in range(cols_per_row):
-                        if j < len(row_items):
-                            col_name, stats = row_items[j]
-                            display_name, help_text = stats["display_info"]
-                            with cols[j]:
-                                st.metric(
-                                    display_name,
-                                    f"{stats['count']} ({stats['percentage']:.1f}%)",
-                                    help=help_text,
-                                )
-                    else:
+                    cols = st.columns(min(cols_per_row, num_categories - i))
+
+                    for j, (display_name, stats) in enumerate(
+                            list(category_stats.items())[i: i + cols_per_row]
+                    ):
                         with cols[j]:
-                            st.empty()
+                            st.metric(
+                                display_name,
+                                f"{stats['count']} ({stats['percentage']:.1f}%)" if stats['percentage'] > 0 else None,
+                                help=stats['description'],
+                            )
 
             # Overall summary metrics
             st.subheader("📈 Overall Summary")
@@ -313,7 +311,6 @@ def display_summary_statistics(data: AnalysisData):
         upset_class_count = upset_class_count.sort_values("total_matches", ascending=False)
         top_pharm_classes = ((upset_class_count > 0).astype(int)).sum(axis=0).nlargest(nlarge)
         total_matches = top_pharm_classes.iloc[0]
-        st.write(total_matches)
         top_pharm_classes.reset_index().rename(
             columns={"class_group": "Pharmacologic Class", 0: "Number of samples containing this class"}
         )
