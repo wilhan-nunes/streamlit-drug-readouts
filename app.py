@@ -195,7 +195,8 @@ def process_analysis_data(quant_file_df, annotation_file_df, config, data: Analy
 
         if not st.session_state.get("rerun_analysis", False):
             print('[process_analysis_data] generating feature_annotation...')
-            _feature_annotation, _excluded_features = generate_feature_annotation(_annotation_metadata, feature_filtered)
+            _feature_annotation, _excluded_features = generate_feature_annotation(_annotation_metadata,
+                                                                                  feature_filtered)
         else:
             print('[process_analysis_data] Rerun - reading feature_annotation from session...')
             _feature_annotation = data.feature_annotation
@@ -262,7 +263,8 @@ def display_summary_statistics(data: AnalysisData):
                 if col_name in data.stratified_df.columns:
                     count = (data.stratified_df[col_name] == "Yes").sum()
                     pct = (count / sample_count) * 100 if sample_count > 0 else 0
-                    category_stats[display_name[0]] = {"count": count, "percentage": pct, "description": display_name[1]}
+                    category_stats[display_name[0]] = {"count": count, "percentage": pct,
+                                                       "description": display_name[1]}
                     # sort
 
             # Display specific drug categories in a grid
@@ -307,7 +309,8 @@ def display_summary_statistics(data: AnalysisData):
         with col1:
             upset_analog_inclusion = st.radio("Drug Analogs", options=['Include', 'Exclude'], index=1, horizontal=True)
         with col2:
-            nlarge = st.number_input("Number of Top Classes to Display", min_value=1, value=20, key="top_classes_summary")
+            nlarge = st.number_input("Number of Top Classes to Display", min_value=1, value=20,
+                                     key="top_classes_summary")
         upset_class_count = data.class_count_df_analog if upset_analog_inclusion == "Include" else data.class_count_df
         upset_class_count = upset_class_count.sort_values("total_matches", ascending=False)
         top_pharm_classes = ((upset_class_count > 0).astype(int)).sum(axis=0).nlargest(nlarge)
@@ -327,7 +330,7 @@ def display_summary_statistics(data: AnalysisData):
         # Add percentage text inside bars (centered)
         for i, (count, pct) in enumerate(zip(top_pharm_classes.values, percentages.values)):
             fig.add_annotation(
-                x=count/2,
+                x=count / 2,
                 y=i,
                 text=f"{pct}%",
                 showarrow=False,
@@ -336,6 +339,13 @@ def display_summary_statistics(data: AnalysisData):
 
         fig.update_layout(height=600, margin=dict(l=200), yaxis=dict(autorange="reversed"))
         st.plotly_chart(fig, use_container_width=True)
+        st.download_button(
+            label=":material/download: Download data",
+            data=((upset_class_count > 0).astype(int)).sum(axis=0).rename('counts').to_csv(sep="\t"),
+            file_name="top_pharm_classes.tsv",
+            mime="text/tab-separated-values",
+            key="top_parhm_class_table_download",
+        )
 
 
 def display_feature_annotation_table(data: AnalysisData):
