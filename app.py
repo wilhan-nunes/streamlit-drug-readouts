@@ -42,6 +42,8 @@ class AnalysisData:
     class_count_df: Optional[pd.DataFrame] = None
     class_count_df_analog: Optional[pd.DataFrame] = None
     default_excluded_features: Optional[pd.DataFrame] = None
+    class_compound_dict: Optional[dict] = None
+    class_compound_dict_analog: Optional[dict] = None
 
     def save_to_session(self):
         """Save all data to session state"""
@@ -213,7 +215,7 @@ def process_analysis_data(quant_file_df, annotation_file_df, config, data: Analy
         )
 
         # Count drug class occurrences
-        _class_count_df, _class_count_df_analog = count_drug_class_occurrences(
+        _class_count_df, _class_count_df_analog, _class_compounds_dict, _class_compounds_dict_analog = count_drug_class_occurrences(
             _feature_annotation, class_column="pharmacologic_class"
         )
         _class_count_df["total_matches"] = _class_count_df.sum(axis=1)
@@ -226,6 +228,8 @@ def process_analysis_data(quant_file_df, annotation_file_df, config, data: Analy
         data.class_count_df = _class_count_df
         data.class_count_df_analog = _class_count_df_analog
         data.default_excluded_features = _excluded_features
+        data.class_compound_dict = _class_compounds_dict
+        data.class_compound_dict_analog = _class_compounds_dict_analog
         data.save_to_session()
         print('[process_analysis_data]  saved to session...')
 
@@ -319,13 +323,22 @@ def display_summary_statistics(data: AnalysisData):
             columns={"class_group": "Pharmacologic Class", 0: "Number of samples containing this class"}
         )
         percentages = (top_pharm_classes / total_matches * 100).round(1)
+
+        compounds_dict = data.class_compound_dict_analog if upset_analog_inclusion == "Include" else data.class_compound_dict
+        compounds_list = [compounds_dict.get(pharm_class, []) for pharm_class in top_pharm_classes.index]
         fig = px.bar(
             x=top_pharm_classes.values,
             y=top_pharm_classes.index,
             orientation='h',
             title=f"Top {nlarge} Pharmacologic Classes by Sample Count",
             labels={"x": "Number of Samples", "y": "Pharmacologic Class"},
-            # category_orders={"y": top_pharm_classes.index.tolist()[::-1]}
+            hover_data={"compounds": compounds_list},
+        )
+
+        fig.update_traces(
+            hovertemplate='<b>%{y}</b><br>' +
+                          'Sample Count: %{x}<br>' +
+                          '<b>Compounds</b>: %{customdata}<extra></extra>'
         )
         # Add percentage text inside bars (centered)
         for i, (count, pct) in enumerate(zip(top_pharm_classes.values, percentages.values)):
@@ -339,9 +352,14 @@ def display_summary_statistics(data: AnalysisData):
 
         fig.update_layout(height=600, margin=dict(l=200), yaxis=dict(autorange="reversed"))
         st.plotly_chart(fig, use_container_width=True)
+
+        download_df = ((upset_class_count > 0).astype(int)).sum(axis=0).rename('counts').to_frame()
+        download_df['compounds'] = [";".join(compounds_dict.get(pharm_class, [])) for pharm_class in download_df.index]
+
+
         st.download_button(
             label=":material/download: Download data",
-            data=((upset_class_count > 0).astype(int)).sum(axis=0).rename('counts').to_csv(sep="\t"),
+            data=download_df.to_csv(sep="\t"),
             file_name="top_pharm_classes.tsv",
             mime="text/tab-separated-values",
             key="top_parhm_class_table_download",

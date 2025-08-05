@@ -317,44 +317,85 @@ def stratify_by_drug_class(
 def count_drug_class_occurrences(
     feature_annotation: pd.DataFrame,
     class_column: str = "pharmacologic_class",
+    compound_name_column: str = "name_parent_compound",
     file_extensions: List[str] = ["mzML", "mzXML"],
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, dict, dict]:
     """
-    Counts the number of times each drug class appears in each sample.
+    Counts the number of times each drug class appears in each sample and maps compounds to classes.
+
     :param feature_annotation: Annotated feature intensity data.
     :param class_column: Column name for drug class (e.g., 'pharmacologic_class').
+    :param compound_name_column: Column name for compound names (e.g., 'name_parent_compound').
     :param file_extensions: File extensions used to select intensity columns.
-    :return: pd.DataFrame: two DataFrames with sample-wise counts for each class, without and with analogs. (in this order)
+    :return: tuple containing:
+        - pd.DataFrame: sample-wise counts for each class (without analogs)
+        - pd.DataFrame: sample-wise counts for each class (with analogs)
+        - dict: mapping of drug classes to compound names (without analogs)
+        - dict: mapping of drug classes to compound names (with analogs)
     """
     pattern = "|".join(file_extensions)
     df = feature_annotation.copy()
+
+    # Clean and prepare data
     df[class_column] = df[class_column].fillna("NA")
     df = df[df[class_column] != "NA"]
     df = df[df[class_column] != "no_match"]
+
+    # Explode classes (handle multiple classes per compound)
     df = df.assign(class_group=df[class_column].str.split("\\|")).explode("class_group")
     df = df[df["class_group"].notna()]
-    df_class = df[["class_group"] + df.filter(regex=pattern).columns.tolist()]
+
+    # Create intensity matrix
+    intensity_cols = df.filter(regex=pattern).columns.tolist()
+    df_class = df[["class_group", compound_name_column] + intensity_cols]
     df_class_binary = df_class.copy()
-    df_class_binary[df_class_binary.columns[1:]] = (
-        df_class_binary[df_class_binary.columns[1:]].gt(0).astype(int)
-    )
-    # Without analogs
-    df_no_analogs = feature_annotation[~feature_annotation["chemical_source"].str.contains("analog", case=False, na=False)].copy()
+    df_class_binary[intensity_cols] = (df_class_binary[intensity_cols].gt(0).astype(int))
+
+    # Create compound-to-class mapping (with analogs)
+    class_to_compounds_with_analogs = {}
+    for class_group in df_class_binary["class_group"].unique():
+        compounds = df_class_binary[df_class_binary["class_group"] == class_group][compound_name_column].dropna().unique().tolist()
+        class_to_compounds_with_analogs[class_group] = compounds
+
+    # Process without analogs
+    df_no_analogs = feature_annotation[
+        ~feature_annotation["chemical_source"].str.contains("analog", case=False, na=False)
+    ].copy()
     df_no_analogs[class_column] = df_no_analogs[class_column].fillna("NA")
     df_no_analogs = df_no_analogs[df_no_analogs[class_column] != "NA"]
     df_no_analogs = df_no_analogs[df_no_analogs[class_column] != "no_match"]
-    df_no_analogs = df_no_analogs.assign(class_group=df_no_analogs[class_column].str.split("\\|")).explode("class_group")
+
+    # Explode classes for no-analogs data
+    df_no_analogs = df_no_analogs.assign(
+        class_group=df_no_analogs[class_column].str.split("\\|")
+    ).explode("class_group")
     df_no_analogs = df_no_analogs[df_no_analogs["class_group"].notna()]
-    df_class_no_analogs = df_no_analogs[["class_group"] + df_no_analogs.filter(regex=pattern).columns.tolist()]
+
+    # Create intensity matrix (no analogs)
+    df_class_no_analogs = df_no_analogs[["class_group", compound_name_column] + intensity_cols]
     df_class_binary_no_analogs = df_class_no_analogs.copy()
-    df_class_binary_no_analogs[df_class_binary_no_analogs.columns[1:]] = (
-        df_class_binary_no_analogs[df_class_binary_no_analogs.columns[1:]].gt(0).astype(int)
-    )
-    return (
-        df_class_binary_no_analogs.groupby("class_group").sum().T,
-        df_class_binary.groupby("class_group").sum().T,
+    df_class_binary_no_analogs[intensity_cols] = (
+        df_class_binary_no_analogs[intensity_cols].gt(0).astype(int)
     )
 
+    # Create compound-to-class mapping (without analogs)
+    class_to_compounds_no_analogs = {}
+    for class_group in df_class_binary_no_analogs["class_group"].unique():
+        compounds = df_class_binary_no_analogs[
+            df_class_binary_no_analogs["class_group"] == class_group
+        ][compound_name_column].dropna().unique().tolist()
+        class_to_compounds_no_analogs[class_group] = compounds
+
+    # Generate count matrices
+    counts_no_analogs = df_class_binary_no_analogs.groupby("class_group")[intensity_cols].sum().T
+    counts_with_analogs = df_class_binary.groupby("class_group")[intensity_cols].sum().T
+
+    return (
+        counts_no_analogs,
+        counts_with_analogs,
+        class_to_compounds_no_analogs,
+        class_to_compounds_with_analogs,
+    )
 if __name__ == "__main__":
     # --- User-Defined Parameters Section ---
     # This section allows the user to modify parameters for running the script as a standalone file.
