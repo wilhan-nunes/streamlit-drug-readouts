@@ -356,7 +356,6 @@ def display_summary_statistics(data: AnalysisData):
         download_df = ((upset_class_count > 0).astype(int)).sum(axis=0).rename('counts').to_frame()
         download_df['compounds'] = [";".join(compounds_dict.get(pharm_class, [])) for pharm_class in download_df.index]
 
-
         st.download_button(
             label=":material/download: Download data",
             data=download_df.to_csv(sep="\t"),
@@ -380,19 +379,37 @@ def display_feature_annotation_table(data: AnalysisData):
     )
     st.warning(
         "***Before editing** the data, please clear all filters.*\n\n"
-        ":red[**Low confidence**]: Annotations with low confidence (i.e., cosine score < 0.9, matched peaks <= 2) are highlighted in red. "
     )
 
+    # Check size before styling the display dataframe
+    if data.feature_annotation.size <= 262144:
+        st.warning(
+            ":red[**Low confidence**]: Annotations with low confidence (i.e., cosine score < 0.9, matched peaks <= 2) are highlighted in red. ")
+    else:
+        st.warning(f":red[**Low confidence**]: Annotations with low confidence (i.e., cosine score < 0.9, matched peaks <= 2) are **not highlighted** (dataframe too large). Please, inspect manually.")
+
     filtered_df = add_df_and_filtering(data.feature_annotation, "feature_annotation_filtered")
-    # Highlighting low confidence annotations (possibly a slowing step)
-    edited_df = st.data_editor(
-        filtered_df.style.apply(highlight_low_confidence, axis=1),
-        key="feature_annotation_editor",
-        use_container_width=True,
-        num_rows="dynamic",
-        height=400,
-        disabled=["CosineScore", "MatchedPeaks"]
-    )
+
+    # Check size before styling the filtered dataframe for the editor
+    if filtered_df.size <= 262144:
+        # Apply styling only if the filtered dataframe is small enough
+        edited_df = st.data_editor(
+            filtered_df.style.apply(highlight_low_confidence, axis=1),
+            key="feature_annotation_editor",
+            use_container_width=True,
+            num_rows="dynamic",
+            height=400,
+            disabled=["CosineScore", "MatchedPeaks"]
+        )
+    else:
+        edited_df = st.data_editor(
+            filtered_df,
+            key="feature_annotation_editor",
+            use_container_width=True,
+            num_rows="dynamic",
+            height=400,
+            disabled=["CosineScore", "MatchedPeaks"]
+        )
 
     # Rerun button
     col1, col2, col3 = st.columns([1, 2, 1])
