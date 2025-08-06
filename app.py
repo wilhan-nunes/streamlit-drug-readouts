@@ -77,7 +77,7 @@ def setup_sidebar():
 
         # Get query params
         query_params = st.query_params
-        gnps_task_id = query_params.get("taskid", "")
+        gnps_task_id = query_params.get("task_id", "")
         threshold = query_params.get("threshold", 1000)
         blank_str = query_params.get("blank_ids", None)
 
