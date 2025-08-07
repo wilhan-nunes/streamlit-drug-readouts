@@ -143,7 +143,7 @@ def highlight_yes(val):
 
 
 def highlight_low_confidence(row):
-    return ['background-color: #fec4c4' if row['MatchedPeaks'] <= 2 and row['CosineScore'] < 0.9 else '' for _ in row]
+    return ['background-color: #fec4c4' if int(row['MatchedPeaks']) <= 2 and float(row['CosineScore']) < 0.9 else '' for _ in row]
 
 
 @st.cache_data
@@ -421,7 +421,7 @@ def add_df_and_filtering(df, key_prefix:str, default_cols: List = None):
         if st.button("➖ Remove Filter Field", use_container_width=True, key=f"{key_prefix}_rmv_btn"):
             st.session_state[f"{key_prefix}_filter_count"] -= 1
 
-    filtered_df = df.copy()
+    filtered_df = df.astype(str).copy()
 
     # Generate filter fields
     for i in range(st.session_state[f"{key_prefix}_filter_count"]):
