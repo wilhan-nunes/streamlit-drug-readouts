@@ -142,8 +142,20 @@ def highlight_yes(val):
     return ""
 
 
+def conditional_highlighter_yes(df):
+    if df.size <= 262144:
+        return df.style.map(highlight_yes)
+    return df
+
+
 def highlight_low_confidence(row):
     return ['background-color: #fec4c4' if int(row['MatchedPeaks']) <= 2 and float(row['CosineScore']) < 0.9 else '' for _ in row]
+
+
+def conditional_highlighter_low_confidence(df):
+    if df.size <= 262144:
+        return df.style.apply(highlight_low_confidence, axis=1)
+    return df
 
 
 @st.cache_data

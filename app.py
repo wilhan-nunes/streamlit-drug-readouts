@@ -367,7 +367,7 @@ def display_summary_statistics(data: AnalysisData):
 
 def display_feature_annotation_table(data: AnalysisData):
     """Display and handle feature annotation table editing"""
-    from utils import add_df_and_filtering
+    from utils import add_df_and_filtering, conditional_highlighter_low_confidence
 
     st.header("🔬 Feature Annotation Table")
     st.write(
@@ -390,26 +390,15 @@ def display_feature_annotation_table(data: AnalysisData):
 
     filtered_df = add_df_and_filtering(data.feature_annotation, "feature_annotation_filtered")
 
-    # Check size before styling the filtered dataframe for the editor
-    if filtered_df.size <= 262144:
-        # Apply styling only if the filtered dataframe is small enough
-        edited_df = st.data_editor(
-            filtered_df.style.apply(highlight_low_confidence, axis=1),
-            key="feature_annotation_editor",
-            use_container_width=True,
-            num_rows="dynamic",
-            height=400,
-            disabled=["CosineScore", "MatchedPeaks"]
-        )
-    else:
-        edited_df = st.data_editor(
-            filtered_df,
-            key="feature_annotation_editor",
-            use_container_width=True,
-            num_rows="dynamic",
-            height=400,
-            disabled=["CosineScore", "MatchedPeaks"]
-        )
+    # Apply styling only if the filtered dataframe is small enough
+    edited_df = st.data_editor(
+        conditional_highlighter_low_confidence(filtered_df),
+        key="feature_annotation_editor",
+        use_container_width=True,
+        num_rows="dynamic",
+        height=400,
+        disabled=["CosineScore", "MatchedPeaks"]
+    )
 
     # Rerun button
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -437,7 +426,7 @@ def display_feature_annotation_table(data: AnalysisData):
 
 def display_drug_detection_tables(data: AnalysisData):
     """Display drug detection tables"""
-    from utils import highlight_yes
+    from utils import conditional_highlighter_yes
 
     st.header("🧪 Drug Detection")
 
@@ -455,11 +444,12 @@ def display_drug_detection_tables(data: AnalysisData):
         display_comparison_statistics(data)
 
     with table_tab:
+        #Conditionally highlight "Yes" values in the tables (if df is small enough)
         st.subheader("Excluding Drug Analogs")
-        st.dataframe(stratified_df_clean.style.map(highlight_yes), use_container_width=True)
+        st.dataframe(conditional_highlighter_yes(stratified_df_clean), use_container_width=True)
 
         with st.expander("Show results including drug analogs"):
-            st.dataframe(stratified_df_analogs_clean.style.map(highlight_yes), use_container_width=True)
+            st.dataframe(conditional_highlighter_yes(stratified_df_analogs_clean), use_container_width=True)
 
 
 def display_drug_class_summary(data: AnalysisData):
