@@ -30,7 +30,7 @@ def welcome_page():
     To explore the functionality without inputting your own data, use the **"Load example"** checkbox in the sidebar.
     
     ### 🔗 Related Tools
-    - [Food Readout App](https://foodreadouts.streamlit.app/): interprets dietary exposure
+    - [Food Readout App](https://foodreadouts.gnps2.org/): interprets dietary exposure
     - [CMMC Dashboard](https://cmmc-dashboard.gnps2.org/): explores microbiome-derived metabolite annotations
     
     ---    
