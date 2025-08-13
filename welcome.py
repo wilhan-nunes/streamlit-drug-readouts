@@ -12,14 +12,15 @@ def welcome_page():
 
     
     ### 🧭 Purpose
-    This app is designed to **contextualize GNPS molecular networking results** into biological metadata using standardized drug-related vocabularies. It enables interpretation of potential **drug exposures** by linking molecular features to reference **pharmacological ontologies**.
+    This app translates GNPS compound annotations into drug exposure information. The app utilizes standardized pharmacologic vocabularies developed for all drug reference spectra on GNPS. By linking molecular features to pharmacological ontologies, it enables rapid identification of drugs present in your data and provides insights into their properties.
     
     ### 📘 How It Works
-    1. **Enter a GNPS Feature-Based Molecular Networking task ID and set parameters**
-    2. The app retrieves and matches compound annotations to entries in a curated drug ontology
-    3. Visualize and customize the annotations table and rerun analysis
-    4. Results are categorized and summarized at various levels (e.g., drug class, subclass, mechanism)
-    5. Outputs are interactive and downloadable for downstream analysis
+    1. Download GNPS Drug Library mgf spectra: https://zenodo.org/records/15259192
+       (Note: The App still works if you use the default library in FBMN job. However, using the GNPS Drug Library will increase the coverage of your drug detection, especially for drug metabolites).
+    2. Run a FBMN job using the GNPS Drug Library MGF file
+    3. Enter the GNPS Feature-Based Molecular Networking task ID and set parameters in the DrugReadoutApp
+    4. The app retrieves and matches compound annotations to entries in a curated drug ontology
+    5. The app also visualizes and allows customization of the annotations table
     
     ### 🧩 Key Features
     - 🔍 Annotates input feature tables with drug classifications
