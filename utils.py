@@ -345,7 +345,7 @@ def add_sankey_graph(feature_annotation):
     if not st.session_state.get("run_analysis", False):
         return
 
-    st.header("🌊 Chemical Source and Therapeutic area overview")
+    st.header("🌊 Pharmacologic Classification Overview")
 
     # Get the feature annotation data from session state
     if feature_annotation is None:
