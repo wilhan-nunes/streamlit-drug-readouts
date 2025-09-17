@@ -13,7 +13,7 @@ warnings.filterwarnings('ignore', category=FutureWarning, module='upsetplot')
 
 # Set page configuration
 page_title = "Drug Readout Analysis"
-app_version = "2025-07-31"
+app_version = "2025-08-17"
 git_hash = get_git_short_rev()
 repo_link = "https://github.com/wilhan-nunes/streamlit_drug_readouts"
 
