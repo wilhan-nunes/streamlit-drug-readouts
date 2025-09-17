@@ -306,8 +306,11 @@ def stratify_by_drug_class(
     # Final aggregation and binarization
     final_df = pd.concat(non_empty_dfs, sort=False)
 
+    # Ensure all values are numeric before thresholding
+    final_df_numeric = final_df.apply(pd.to_numeric, errors="coerce")
+
     # Convert to binary (True/False) then to Yes/No
-    final_df_TF = final_df >= peak_threshold
+    final_df_TF = final_df_numeric >= peak_threshold
     final_df_TF = final_df_TF.T.map(lambda x: "Yes" if x  else "No")
     final_df_TF = final_df_TF.reset_index().rename(columns={"index": "Sample"})
 
