@@ -666,6 +666,7 @@ if st.session_state.run_analysis:
     with st.spinner("Generating Sankey plot..."):
         st.markdown("---")
         add_sankey_graph(data.feature_annotation)
+    print('[main] All visualizations rendered')
 
 else:
     print('Welcome Page Loaded')
