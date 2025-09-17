@@ -148,7 +148,13 @@ def stratify_by_drug_class(
     :param exclude_analogs: Whether to exclude analogs.
     :return: pd.DataFrame: Transposed binary DataFrame indicating drug class presence by sample.
     """
+    # Make a copy to avoid modifying the original
+    feature_annotation = feature_annotation.copy()
+    
+    # Get sample columns and ensure they are numeric
     sample_columns = feature_annotation.filter(regex=column_pattern).columns
+    for col in sample_columns:
+        feature_annotation[col] = pd.to_numeric(feature_annotation[col], errors="coerce").fillna(0)
 
     if exclude_analogs:
         exo_drug = feature_annotation[
@@ -306,12 +312,9 @@ def stratify_by_drug_class(
     # Final aggregation and binarization
     final_df = pd.concat(non_empty_dfs, sort=False)
 
-    # Ensure all values are numeric before thresholding
-    final_df_numeric = final_df.apply(pd.to_numeric, errors="coerce")
-
     # Convert to binary (True/False) then to Yes/No
-    final_df_TF = final_df_numeric >= peak_threshold
-    final_df_TF = final_df_TF.T.map(lambda x: "Yes" if x  else "No")
+    final_df_TF = final_df >= peak_threshold
+    final_df_TF = final_df_TF.T.map(lambda x: "Yes" if x else "No")
     final_df_TF = final_df_TF.reset_index().rename(columns={"index": "Sample"})
 
     return final_df_TF
@@ -339,6 +342,11 @@ def count_drug_class_occurrences(
     pattern = "|".join(file_extensions)
     df = feature_annotation.copy()
 
+    # Ensure intensity columns are numeric
+    intensity_cols = df.filter(regex=pattern).columns.tolist()
+    for col in intensity_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
     # Clean and prepare data
     df[class_column] = df[class_column].fillna("NA")
     df = df[df[class_column] != "NA"]
@@ -349,7 +357,6 @@ def count_drug_class_occurrences(
     df = df[df["class_group"].notna()]
 
     # Create intensity matrix
-    intensity_cols = df.filter(regex=pattern).columns.tolist()
     df_class = df[["class_group", compound_name_column] + intensity_cols]
     df_class_binary = df_class.copy()
     df_class_binary[intensity_cols] = (df_class_binary[intensity_cols].gt(0).astype(int))
@@ -364,6 +371,11 @@ def count_drug_class_occurrences(
     df_no_analogs = feature_annotation[
         ~feature_annotation["chemical_source"].str.contains("analog", case=False, na=False)
     ].copy()
+    
+    # Ensure intensity columns are numeric for no-analogs data
+    for col in intensity_cols:
+        df_no_analogs[col] = pd.to_numeric(df_no_analogs[col], errors="coerce").fillna(0)
+    
     df_no_analogs[class_column] = df_no_analogs[class_column].fillna("NA")
     df_no_analogs = df_no_analogs[df_no_analogs[class_column] != "NA"]
     df_no_analogs = df_no_analogs[df_no_analogs[class_column] != "no_match"]
