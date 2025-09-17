@@ -13,7 +13,7 @@ warnings.filterwarnings('ignore', category=FutureWarning, module='upsetplot')
 
 # Set page configuration
 page_title = "Drug Readout Analysis"
-app_version = "2025-07-31"
+app_version = "2025-08-17"
 git_hash = get_git_short_rev()
 repo_link = "https://github.com/wilhan-nunes/streamlit_drug_readouts"
 
@@ -666,6 +666,7 @@ if st.session_state.run_analysis:
     with st.spinner("Generating Sankey plot..."):
         st.markdown("---")
         add_sankey_graph(data.feature_annotation)
+    print('[main] All visualizations rendered')
 
 else:
     print('Welcome Page Loaded')

@@ -166,6 +166,9 @@ def create_sankey_plot(feature_annotation: pd.DataFrame, top_areas: int = 5, top
     Parameters:
     feature_annotation_filtered (pd.DataFrame): Input dataframe with drug detection data already filtered to remove 'Food|Endogenous'
     """
+    
+    # Make a copy to avoid modifying the original
+    feature_annotation = feature_annotation.copy()
 
     # Clean the name_parent_compound column (equivalent to str_trim)
     feature_annotation["name_parent_compound"] = feature_annotation[
@@ -185,6 +188,12 @@ def create_sankey_plot(feature_annotation: pd.DataFrame, top_areas: int = 5, top
         for col in feature_annotation.columns
         if "name_parent_compound" in col or ".mzML" in col or "mzXML" in col
     ]
+    
+    # Ensure numeric columns are actually numeric
+    numeric_cols = [col for col in peak_area_cols if ".mzML" in col or "mzXML" in col]
+    for col in numeric_cols:
+        feature_annotation[col] = pd.to_numeric(feature_annotation[col], errors="coerce").fillna(0)
+    
     exo_drug_peak_area = feature_annotation[peak_area_cols]
 
     # Group by name_parent_compound and sum
@@ -417,6 +426,7 @@ def add_sankey_graph(feature_annotation):
         except Exception as e:
             st.error(f"Error generating Sankey diagram: {str(e)}")
             st.info("Please check your data format and try again.")
+            raise e
 
 
 def add_df_and_filtering(df, key_prefix:str, default_cols: List = None):
