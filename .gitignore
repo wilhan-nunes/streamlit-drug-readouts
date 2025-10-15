@@ -2,3 +2,5 @@
 /input_tables/*
 *.tsv
 /ignored_files/
+/.conda/
+__pycache__

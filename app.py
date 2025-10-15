@@ -120,7 +120,7 @@ def setup_sidebar():
             "Run Analysis",
             icon="🏁",
             help="Click to start the analysis with the provided inputs.",
-            use_container_width=True,
+            width='stretch',
             key="run_analysis_button",
             disabled=not (task_id or load_example_data)
         )
@@ -129,7 +129,7 @@ def setup_sidebar():
                 "Restart Session",
                 icon="♻️",
                 key="restart_session",
-                use_container_width=True,
+                width='stretch',
                 type="primary",
         ):
             st.session_state.clear()
@@ -234,6 +234,7 @@ def process_analysis_data(quant_file_df, annotation_file_df, config, data: Analy
         print('[process_analysis_data]  saved to session...')
 
 
+@st.fragment
 def display_summary_statistics(data: AnalysisData):
     """Display drug detection summary statistics"""
     st.header("📊 Drug Detection Summary Statistics")
@@ -351,7 +352,7 @@ def display_summary_statistics(data: AnalysisData):
             )
 
         fig.update_layout(height=600, margin=dict(l=200), yaxis=dict(autorange="reversed"))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
         download_df = ((upset_class_count > 0).astype(int)).sum(axis=0).rename('counts').to_frame()
         download_df['compounds'] = [";".join(compounds_dict.get(pharm_class, [])) for pharm_class in download_df.index]
@@ -365,6 +366,7 @@ def display_summary_statistics(data: AnalysisData):
         )
 
 
+@st.fragment
 def display_feature_annotation_table(data: AnalysisData):
     """Display and handle feature annotation table editing"""
     from utils import add_df_and_filtering, conditional_highlighter_low_confidence
@@ -394,7 +396,7 @@ def display_feature_annotation_table(data: AnalysisData):
     edited_df = st.data_editor(
         conditional_highlighter_low_confidence(filtered_df),
         key="feature_annotation_editor",
-        use_container_width=True,
+        width='stretch',
         num_rows="dynamic",
         height=400,
         disabled=["CosineScore", "MatchedPeaks"]
@@ -405,7 +407,7 @@ def display_feature_annotation_table(data: AnalysisData):
     with col2:
         if st.button(
                 "🔄 Rerun Analysis with Edited Data",
-                use_container_width=True,
+                width='stretch',
                 type="primary",
                 key="rerun_analysis_button",
         ):
@@ -446,12 +448,13 @@ def display_drug_detection_tables(data: AnalysisData):
     with table_tab:
         #Conditionally highlight "Yes" values in the tables (if df is small enough)
         st.subheader("Excluding Drug Analogs")
-        st.dataframe(conditional_highlighter_yes(stratified_df_clean), use_container_width=True)
+        st.dataframe(conditional_highlighter_yes(stratified_df_clean), width='stretch')
 
         with st.expander("Show results including drug analogs"):
-            st.dataframe(conditional_highlighter_yes(stratified_df_analogs_clean), use_container_width=True)
+            st.dataframe(conditional_highlighter_yes(stratified_df_analogs_clean), width='stretch')
 
 
+@st.fragment
 def display_drug_class_summary(data: AnalysisData):
     """Display drug class summary with UpSet plot and tables"""
     import matplotlib.pyplot as plt
@@ -539,6 +542,7 @@ def create_upset_plot(upset_class_count, n_top_classes, max_samples, upset_analo
         return None, f"Error creating UpSet plot: {str(e)}"
 
 
+@st.fragment
 def display_upset_plot(upset_fig, error_message=None):
     """Display UpSet plot in Streamlit interface"""
     import matplotlib.pyplot as plt
@@ -567,7 +571,7 @@ def display_upset_plot(upset_fig, error_message=None):
 
         _, upset_col, _ = st.columns([1, 6, 1])
         with upset_col:
-            st.image(svg, use_container_width=False)
+            st.image(svg, width='content')
             st.download_button(
                 label=":material/download: Download as SVG",
                 data=svg,
@@ -600,7 +604,7 @@ def display_drug_class_tables(upset_class_count, upset_analog_inclusion):
         .reset_index()
         .rename(columns={"index": "Sample"})
     )
-    st.dataframe(class_count_df_display, use_container_width=True)
+    st.dataframe(class_count_df_display, width='stretch')
 
 
 ###############################

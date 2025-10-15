@@ -65,7 +65,7 @@ def display_comparison_statistics(data):
 
         with col1:
             st.subheader("📊 Detection Comparison")
-            st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+            st.dataframe(comparison_df, width='stretch', hide_index=True)
 
         with col2:
             st.subheader("📈 Impact of Including Analogs")
@@ -77,7 +77,7 @@ def display_comparison_statistics(data):
                 barmode="group"
             )
             fig_comparison.update_layout(xaxis_tickangle=-45, yaxis_title="Number of samples")
-            st.plotly_chart(fig_comparison, use_container_width=True)
+            st.plotly_chart(fig_comparison, width='stretch')
 
 
 def generate_colors(n, base_color=(0.55, 0.85, 0.9)):
@@ -397,7 +397,7 @@ def add_sankey_graph(feature_annotation):
                                      exclude_analogs=(analog_selection == 'Exclude'))
 
             if fig is not None:
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 svg_bytes = fig.to_image(format="svg")
                 st.download_button(
                     label=":material/download: Download Plot as SVG",
@@ -437,10 +437,10 @@ def add_df_and_filtering(df, key_prefix:str, default_cols: List = None):
     add_col, remove_col, _, _ = st.columns(4)
     with add_col:
         # Button to add more filter fields
-        if st.button("➕ Add Filter Field", use_container_width=True, key=f"{key_prefix}_add_btn"):
+        if st.button("➕ Add Filter Field", width='stretch', key=f"{key_prefix}_add_btn"):
             st.session_state[f"{key_prefix}_filter_count"] += 1
     with remove_col:
-        if st.button("➖ Remove Filter Field", use_container_width=True, key=f"{key_prefix}_rmv_btn"):
+        if st.button("➖ Remove Filter Field", width='stretch', key=f"{key_prefix}_rmv_btn"):
             st.session_state[f"{key_prefix}_filter_count"] -= 1
 
     filtered_df = df.astype(str).copy()
