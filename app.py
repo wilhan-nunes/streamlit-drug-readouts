@@ -352,7 +352,7 @@ def display_summary_statistics(data: AnalysisData):
             )
 
         fig.update_layout(height=600, margin=dict(l=200), yaxis=dict(autorange="reversed"))
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
 
         download_df = ((upset_class_count > 0).astype(int)).sum(axis=0).rename('counts').to_frame()
         download_df['compounds'] = [";".join(compounds_dict.get(pharm_class, [])) for pharm_class in download_df.index]
@@ -372,25 +372,31 @@ def display_feature_annotation_table(data: AnalysisData):
     from utils import add_df_and_filtering, conditional_highlighter_low_confidence
 
     st.header("🔬 Feature Annotation Table")
-    st.write(
-        "You can edit the table below and then rerun the analysis with your modifications. "
-        "[:material/help: Learn how](https://www.youtube.com/watch?v=6tah69LkfxE&list=TLGGKK4Dnf1gepcwNTA2MjAyNQ)"
-    )
-    st.markdown(
-        f"[:material/report: Report an annotation issue]({repo_link}/issues/new?assignees=&labels=bug&template=bug_report.md&title=Feature+Annotation+Issue)"
-    )
-    st.warning(
-        "***Before editing** the data, please clear all filters.*\n\n"
-    )
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        with st.expander(
+            "**Edit & Rerun**"):
+            st.markdown(
+            "You can edit the table below and then rerun the analysis with your modifications.\n\n"
+            "[:material/help: Learn how](https://www.youtube.com/watch?v=6tah69LkfxE&list=TLGGKK4Dnf1gepcwNTA2MjAyNQ)"
+        )
+    with col2:
+        with st.expander(
+            "**Before Editing**"):
+            st.markdown(
+            "Please clear all filters before editing the data."
+        )
+    with col3:
+        with st.expander(
+            "**Report Issues**", 
+            icon=":material/report:"):
+            st.markdown(
+            f"[Report an annotation issue]({repo_link}/issues/new?assignees=&labels=bug&template=bug_report.md&title=Feature+Annotation+Issue)"
+        )
+    
+    data_df = data.load_from_session().feature_annotation.copy()
 
-    # Check size before styling the display dataframe
-    if data.feature_annotation.size <= 262144:
-        st.warning(
-            ":red[**Low confidence**]: Annotations with low confidence (i.e., cosine score < 0.9, matched peaks <= 2) are highlighted in red. ")
-    else:
-        st.warning(f":red[**Low confidence**]: Annotations with low confidence (i.e., cosine score < 0.9, matched peaks <= 2) are **not highlighted** (dataframe too large). Please, inspect manually.")
-
-    filtered_df = add_df_and_filtering(data.feature_annotation, "feature_annotation_filtered")
+    filtered_df = add_df_and_filtering(data_df, "feature_annotation_filtered")
 
     # Apply styling only if the filtered dataframe is small enough
     edited_df = st.data_editor(
@@ -402,14 +408,40 @@ def display_feature_annotation_table(data: AnalysisData):
         disabled=["CosineScore", "MatchedPeaks"]
     )
 
+     # Check size before styling the display dataframe
+    
+    low_confidence_count = ((data.feature_annotation['CosineScore'].astype(float) < 0.9) & (data.feature_annotation['MatchedPeaks'].astype(int) <= 2)).sum()
+    
+    if data.feature_annotation.size <= 262144:
+        st.warning(
+            f":red-badge[**{low_confidence_count} Low confidence annotations**]: Features with cosine score < 0.9, matched peaks <= 2 are highlighted in red.")
+    else:
+        st.warning(f":red-badge[**{low_confidence_count} Low confidence annotations**]: Features with cosine score < 0.9, matched peaks <= 2 are **not highlighted** (dataframe too large). Please, inspect manually.")
+
+
     # Rerun button
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button(
+            "Rerun Removing Low Confidence",
+            width='stretch',
+            icon=':material/replay:',
+            disabled=(low_confidence_count == 0),
+            help="No low confidence annotations to remove." if low_confidence_count == 0 else "Click to remove low confidence annotations (cosine score < 0.9 and matched peaks <= 2) and rerun the analysis."
+            ):
+            data.feature_annotation = data.feature_annotation[~((data.feature_annotation['CosineScore'].astype(float) < 0.9) & (data.feature_annotation['MatchedPeaks'].astype(int) <= 2))]
+            data.save_to_session()
+            st.session_state['rerun_analysis'] = True
+            st.rerun()
     with col2:
+        contains_filter = st.session_state.get('feature_annotation_filtered_filter_count', 0) > 0
         if st.button(
                 "🔄 Rerun Analysis with Edited Data",
                 width='stretch',
                 type="primary",
                 key="rerun_analysis_button",
+                disabled=(st.session_state.get('feature_annotation_filtered_filter_count', 0) > 0),
+                help="Click to rerun the analysis using the edited feature annotation table." if not contains_filter else "Please :red-badge[clear all filters before editing] and rerunning the analysis."
         ):
             st.session_state['rerun_analysis'] = True
 
@@ -667,9 +699,8 @@ if st.session_state.run_analysis:
     display_drug_class_summary(data)
 
     # Add Sankey graph
-    with st.spinner("Generating Sankey plot..."):
-        st.markdown("---")
-        add_sankey_graph(data.feature_annotation)
+    st.markdown("---")
+    add_sankey_graph(data.feature_annotation)
     print('[main] All visualizations rendered')
 
 else:

@@ -77,7 +77,7 @@ def display_comparison_statistics(data):
                 barmode="group"
             )
             fig_comparison.update_layout(xaxis_tickangle=-45, yaxis_title="Number of samples")
-            st.plotly_chart(fig_comparison, width='stretch')
+            st.plotly_chart(fig_comparison, use_container_width=True)
 
 
 def generate_colors(n, base_color=(0.55, 0.85, 0.9)):
@@ -346,6 +346,7 @@ def create_sankey_plot(feature_annotation: pd.DataFrame, top_areas: int = 5, top
     return fig
 
 
+@st.fragment
 def add_sankey_graph(feature_annotation):
     """
     Adds the Sankey diagram section to the Streamlit app.
@@ -397,7 +398,7 @@ def add_sankey_graph(feature_annotation):
                                      exclude_analogs=(analog_selection == 'Exclude'))
 
             if fig is not None:
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
                 svg_bytes = fig.to_image(format="svg")
                 st.download_button(
                     label=":material/download: Download Plot as SVG",
@@ -465,8 +466,9 @@ def add_df_and_filtering(df, key_prefix:str, default_cols: List = None):
             filtered_df = filtered_df[filtered_df[selected_col].str.contains(search_term, case=False, na=False)]
 
     # Show result
-    st.markdown("### 🔎 Filtered Results")
-    st.write(f"Total results: {len(filtered_df)}")
+    if st.session_state[f"{key_prefix}_filter_count"] > 0:
+        st.markdown("### 🔎 Filtered Results")
+    st.subheader(f"Total results: {len(filtered_df)}")
     all_cols = filtered_df.columns
     if default_cols:
         with st.expander('Cols to show'):
