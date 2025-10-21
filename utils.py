@@ -399,14 +399,20 @@ def add_sankey_graph(feature_annotation):
 
             if fig is not None:
                 st.plotly_chart(fig, use_container_width=True)
-                svg_bytes = fig.to_image(format="svg")
-                st.download_button(
-                    label=":material/download: Download Plot as SVG",
-                    data=svg_bytes,
-                    file_name=f"sankey_plot.svg",
-                    mime="image/svg+xml",  # Set the MIME type to SVG
-                    key='sankey_plot_download'
-                )
+                btn1, btn2, _, _ = st.columns([1,1,1,1])
+                with btn1:
+                    if st.button("Generate SVG", icon=":material/manufacturing:"):
+                        with btn2:
+                            with st.spinner("Preparing SVG download..."):
+                                svg_bytes = fig.to_image(format="svg")
+                                st.download_button(
+                                    label=":material/download: Download Plot as SVG",
+                                    data=svg_bytes,
+                                    file_name=f"sankey_plot.svg",
+                                    mime="image/svg+xml",  # Set the MIME type to SVG
+                                    key='sankey_plot_download',
+                                    type='primary',
+                                )
 
                 # Add interpretation help
                 with st.expander("How to interpret this Sankey diagram"):
