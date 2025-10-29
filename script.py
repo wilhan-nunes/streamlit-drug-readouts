@@ -167,15 +167,18 @@ def stratify_by_drug_class(
 
     # Fill NaN values
     exo_drug = exo_drug.copy()
-    exo_drug.loc[:, "therapeutic_area"] = exo_drug["therapeutic_area"].fillna("NA")
-    exo_drug.loc[:, "pharmacologic_class"] = exo_drug["pharmacologic_class"].fillna("NA")
-    exo_drug.loc[:, "therapeutic_indication"] = exo_drug["therapeutic_indication"].fillna("NA")
+    # Replace NaN and string "nan" with "NA"
+    exo_drug.loc[:, "therapeutic_area"] = exo_drug["therapeutic_area"].fillna("NA").replace("nan", "NA")
+    exo_drug.loc[:, "pharmacologic_class"] = exo_drug["pharmacologic_class"].fillna("NA").replace("nan", "NA")
+    exo_drug.loc[:, "therapeutic_indication"] = exo_drug["therapeutic_indication"].fillna("NA").replace("nan", "NA")
 
     def aggregate_by_column(exo_df, group_col, prefix=None):
         expanded = exo_df.copy()
         expanded[group_col] = expanded[group_col].astype(str).str.split("|")
         expanded = expanded.explode(group_col)
-        expanded = expanded[~expanded[group_col].isin(["NA", "no_match"])]
+        # Filter out NA, no_match, nan, and empty strings
+        expanded = expanded[~expanded[group_col].isin(["NA", "no_match", "nan", ""])]
+        expanded = expanded[expanded[group_col].notna()]
         if expanded.empty:
             # Return empty DataFrame with correct structure if no data
             empty_df = pd.DataFrame(columns=sample_columns)
@@ -311,6 +314,11 @@ def stratify_by_drug_class(
 
     # Final aggregation and binarization
     final_df = pd.concat(non_empty_dfs, sort=False)
+
+    # Check for and handle duplicate indices (which become column names after transpose)
+    if final_df.index.duplicated().any():
+        # Aggregate duplicates by summing
+        final_df = final_df.groupby(final_df.index).sum()
 
     # Convert to binary (True/False) then to Yes/No
     final_df_TF = final_df >= peak_threshold

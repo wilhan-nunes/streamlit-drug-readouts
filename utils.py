@@ -129,9 +129,16 @@ def fetch_file(
 
     return output_file_path
 
-def load_example():
-    quant_file_df = pd.read_csv('data/example_quant_file_d6f37a11d90c4f249974280c3fc90108.csv')
-    annotation_file_df = pd.read_csv('data/example_annotation_filed6f37a11d90c4f249974280c3fc90108.tsv', sep='\t')
+def load_example(task_id:str):
+    if task_id == 'fa064fe728814f439a1cd3b72deffcd0':
+        quant_file_df = pd.read_csv('data/examples/example_quant_file_fa064fe728814f439a1cd3b72deffcd0.tsv', sep='\t')
+        annotation_file_df = pd.read_csv('data/examples/example_annotation_file_fa064fe728814f439a1cd3b72deffcd0.tsv', sep='\t')
+    elif task_id == 'd6f37a11d90c4f249974280c3fc90108':
+        quant_file_df = pd.read_csv('data/examples/example_quant_file_d6f37a11d90c4f249974280c3fc90108.csv')
+        annotation_file_df = pd.read_csv('data/examples/example_annotation_filed6f37a11d90c4f249974280c3fc90108.tsv', sep='\t')
+    elif task_id == '4d99fc25d84143bdbbf2dd07bf044e5e':
+        quant_file_df = pd.read_csv('data/examples/example_quant_file_4d99fc25d84143bdbbf2dd07bf044e5e.tsv', sep='\t')
+        annotation_file_df = pd.read_csv('data/examples/example_annotation_file_4d99fc25d84143bdbbf2dd07bf044e5e.tsv', sep='\t')
 
     return quant_file_df, annotation_file_df
 

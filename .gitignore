@@ -1,6 +1,6 @@
 *.R*
 /input_tables/*
-*.tsv
+./*.tsv
 /ignored_files/
 /.conda/
 __pycache__
