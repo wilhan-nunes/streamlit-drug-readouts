@@ -16,5 +16,5 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt && plotly_get_chrome -y
 
 COPY . /app
-RUN chmod +x /app/run_server.sh
+RUN chmod +x /app/run_server.sh && chmod +x /app/run_worker.sh
 WORKDIR /app

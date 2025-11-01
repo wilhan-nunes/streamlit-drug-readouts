@@ -1,5 +1,5 @@
 version: '3'
 services:
-  streamlit-drug-redouts:
+  streamlit-drug-readouts:
     ports:
     - "5000:5000"

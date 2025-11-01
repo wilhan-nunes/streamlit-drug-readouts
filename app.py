@@ -9,6 +9,15 @@ import plotly.express as px
 import pandas as pd
 from script import *
 import warnings
+from celery_utils import (
+        check_celery_connection, 
+        submit_download_task, 
+        submit_process_analysis_task,
+        submit_reprocess_analysis_task,
+        wait_for_task,
+        deserialize_analysis_data
+    )
+
 
 warnings.filterwarnings('ignore', category=FutureWarning, module='upsetplot')
 
@@ -193,65 +202,33 @@ def load_data(config):
 
 
 def process_analysis_data(quant_file_df, annotation_file_df, config, data: AnalysisData):
-    """Process the main analysis data"""
-    print('[process_analysis_data] triggered...')
-    _drug_metadata_file = "data/GNPS_Drug_Library_Metadata_Drugs.csv"
-    _analog_metadata_file = "data/GNPS_Drug_Library_Metadata_Drug_Analogs_Updated.csv"
-
-    with st.spinner("Processing data..."):
-        subtract_blanks = True if config['blank_ids'] else False
-        feature_filtered = load_and_filter_features(
-            quant_file_df,
-            intensity_threshold=config['intensity_thresh'],
-            blank_ids=config['blank_ids'],
-            subtract_blanks=subtract_blanks,
-        )
-
-        _annotation_metadata = load_and_merge_annotations(
-            annotation_file_df, _drug_metadata_file, _analog_metadata_file
-        )
-
-        if not st.session_state.get("rerun_analysis", False):
-            print('[process_analysis_data] generating feature_annotation...')
-            _feature_annotation, _excluded_features = generate_feature_annotation(_annotation_metadata,
-                                                                                  feature_filtered)
-        else:
-            print('[process_analysis_data] Rerun - reading feature_annotation from session...')
-            _feature_annotation = data.feature_annotation
-            _excluded_features = data.default_excluded_features
-            st.success(f'Feature annotation retrieved from session state. Shape: {_feature_annotation.shape}')
-            st.session_state["rerun_analysis"] = False
-
-        # Perform analysis
-        _stratified_df = stratify_by_drug_class(
-            _feature_annotation, exclude_analogs=True, peak_threshold=config['intensity_thresh'],
-        )
-        _stratified_df_analogs = stratify_by_drug_class(
-            _feature_annotation, exclude_analogs=False, peak_threshold=config['intensity_thresh'],
-        )
-
-        # Count drug class occurrences
-        _class_count_df, _class_count_df_analog, _class_compounds_dict, _class_compounds_dict_analog = count_drug_class_occurrences(
-            _feature_annotation, class_column="pharmacologic_class"
-        )
-        _class_count_df["total_matches"] = _class_count_df.sum(axis=1)
-        _class_count_df_analog["total_matches"] = _class_count_df.sum(axis=1)
-
-        # Update data object
-        data.feature_annotation = _feature_annotation
-        data.stratified_df = _stratified_df
-        data.stratified_df_analogs = _stratified_df_analogs
-        data.class_count_df = _class_count_df
-        data.class_count_df_analog = _class_count_df_analog
-        data.default_excluded_features = _excluded_features
-        data.class_compound_dict = _class_compounds_dict
-        data.class_compound_dict_analog = _class_compounds_dict_analog
-        data.save_to_session()
-        # save data to load as precomputed demo - uncomment to regenerate cache files
-        # task_id = config.get('task_id', 'unknown')
-        # pickle.dump(data, open(f'./data/examples/processed_analysis_data_{task_id}.pkl', 'wb'))
-
-        print('[process_analysis_data]  saved to session...')
+    """Process the main analysis data - Always uses Celery"""
+    print('[process_analysis_data] triggered with Celery...')
+    
+    # Submit task to Celery
+    task_id = submit_process_analysis_task(quant_file_df, annotation_file_df, config)
+    st.session_state['celery_task_id'] = task_id
+    
+    # Wait for task with simple spinner
+    with st.spinner("Processing analysis..."):
+        result = wait_for_task(task_id)
+    
+    # Deserialize result
+    deserialized = deserialize_analysis_data(result)
+    
+    # Update data object
+    data.feature_annotation = deserialized.get('feature_annotation')
+    data.stratified_df = deserialized.get('stratified_df')
+    data.stratified_df_analogs = deserialized.get('stratified_df_analogs')
+    data.class_count_df = deserialized.get('class_count_df')
+    data.class_count_df_analog = deserialized.get('class_count_df_analog')
+    data.default_excluded_features = deserialized.get('default_excluded_features')
+    data.class_compound_dict = deserialized.get('class_compound_dict')
+    data.class_compound_dict_analog = deserialized.get('class_compound_dict_analog')
+    data.save_to_session()
+    
+    st.success("✅ Analysis completed successfully!")
+    print('[process_analysis_data] saved to session...')
 
 
 @st.fragment
@@ -692,14 +669,24 @@ if config['run_analysis'] or st.session_state.get("rerun_analysis", False):
                 data.save_to_session()
             else:
                 data = AnalysisData()
-                # Process analysis
-                process_analysis_data(st.session_state.quant_file_df, st.session_state.annotation_file_df, config, data)
+                # Process analysis with Celery
+                process_analysis_data(
+                    st.session_state.quant_file_df, 
+                    st.session_state.annotation_file_df, 
+                    config, 
+                    data
+                )
                 data.save_to_session()
         else:
             print('[main] Rerun - Reading data from session state')
             data = AnalysisData.load_from_session()
             # Process analysis with updated data
-            process_analysis_data(st.session_state.quant_file_df, st.session_state.annotation_file_df, config, data)
+            process_analysis_data(
+                st.session_state.quant_file_df, 
+                st.session_state.annotation_file_df, 
+                config, 
+                data
+            )
 
         st.session_state.run_analysis = True
 
