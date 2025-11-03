@@ -89,11 +89,11 @@ def main():
     )
     
     print("Saving cached analysis data...")
-    pickle.dump(data, open(f'./data/examples/examples/processed_analysis_data_{task_id}.pkl', 'wb'))
+    pickle.dump(data, open(f'./data/examples/processed_analysis_data_{task_id}.pkl', 'wb'))
     
     print(f"✅ Successfully generated cache files for task {task_id}")
     print(f"   - Raw data files: data/examples/example_quant_file_{task_id}.tsv, data/examples/example_annotation_file_{task_id}.tsv")
-    print(f"   - Cached analysis: data/examples/erocessed_analysis_data_{task_id}.pkl")
+    print(f"   - Cached analysis: data/examples/processed_analysis_data_{task_id}.pkl")
     print(f"\nAnalysis Summary:")
     print(f"   - Feature annotations: {len(_feature_annotation)}")
     print(f"   - Samples: {len(_stratified_df)}")

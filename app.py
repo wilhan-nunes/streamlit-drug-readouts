@@ -1,4 +1,5 @@
 import pickle
+import os
 from gnpsdata import workflow_fbmn
 from streamlit.components.v1 import html
 import streamlit as st
@@ -67,10 +68,21 @@ class AnalysisData:
     
     @classmethod
     def load_from_file(cls, file_path):
-        """Load data from a pickle file"""
+        """Load data from a pickle file and recreate with current class definition"""
         with open(file_path, 'rb') as f:
-            data = pickle.load(f)
+            old_data = pickle.load(f)
         
+        # Recreate with current class to ensure methods are available
+        data = cls(
+            feature_annotation=getattr(old_data, 'feature_annotation', None),
+            stratified_df=getattr(old_data, 'stratified_df', None),
+            stratified_df_analogs=getattr(old_data, 'stratified_df_analogs', None),
+            class_count_df=getattr(old_data, 'class_count_df', None),
+            class_count_df_analog=getattr(old_data, 'class_count_df_analog', None),
+            default_excluded_features=getattr(old_data, 'default_excluded_features', None),
+            class_compound_dict=getattr(old_data, 'class_compound_dict', None),
+            class_compound_dict_analog=getattr(old_data, 'class_compound_dict_analog', None)
+        )
         return data
 
     @classmethod
@@ -80,7 +92,24 @@ class AnalysisData:
             if field_name in st.session_state:
                 print(field_name, "(shape):", st.session_state[field_name].shape)
             else:
-                print(field_name, "not initialized")
+                                print(field_name, "not initialized")
+
+
+def check_and_generate_cached_example():
+    """Check if cached pkl file exists, generate it if not."""
+    pkl_path = './data/examples/processed_analysis_data_4d99fc25d84143bdbbf2dd07bf044e5e.pkl'
+    
+    if os.path.exists(pkl_path):
+        return True
+    
+    print(f'[check_cached_example] Generating cached file...')
+    try:
+        from generate_cached_example import main as generate_cache
+        generate_cache()
+        return True
+    except Exception as e:
+        print(f"[check_cached_example] Error: {e}")
+        return False
 
 
 def setup_sidebar():
@@ -684,12 +713,18 @@ if config['run_analysis'] or st.session_state.get("rerun_analysis", False):
             load_data(config)
 
             if config['load_precomputed_example']:
-                st.success(
-                    "Cached analysis data loaded successfully. You can edit the feature annotation table and rerun the analysis.\n"
-                    f"- **Task ID:** {config['task_id']} | **Peak threshold:** {int(config['intensity_thresh']):,} | **Blank IDs:** {config['blank_ids']}"
-                )
-                data = AnalysisData.load_from_file('./data/examples/processed_analysis_data_4d99fc25d84143bdbbf2dd07bf044e5e.pkl')
-                data.save_to_session()
+                # Check if cached file exists, generate if needed
+                with st.spinner("Loading precomputed example..."):
+                    if check_and_generate_cached_example():
+                        data = AnalysisData.load_from_file('./data/examples/processed_analysis_data_4d99fc25d84143bdbbf2dd07bf044e5e.pkl')
+                        data.save_to_session()
+                        st.success(
+                            "Cached analysis data loaded successfully. You can edit the feature annotation table and rerun the analysis.\n"
+                            f"- **Task ID:** {config['task_id']} | **Peak threshold:** {int(config['intensity_thresh']):,} | **Blank IDs:** {config['blank_ids']}"
+                        )
+                    else:
+                        st.error("Failed to load or generate cached example. Please try again.")
+                        st.stop()
             else:
                 data = AnalysisData()
                 # Process analysis
