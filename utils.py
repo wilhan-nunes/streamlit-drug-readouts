@@ -65,7 +65,7 @@ def display_comparison_statistics(data):
 
         with col1:
             st.subheader("📊 Detection Comparison")
-            st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+            st.dataframe(comparison_df, width='stretch', hide_index=True)
 
         with col2:
             st.subheader("📈 Impact of Including Analogs")
@@ -129,9 +129,16 @@ def fetch_file(
 
     return output_file_path
 
-def load_example():
-    quant_file_df = pd.read_csv('data/example_quant_file_d6f37a11d90c4f249974280c3fc90108.csv')
-    annotation_file_df = pd.read_csv('data/example_annotation_filed6f37a11d90c4f249974280c3fc90108.tsv', sep='\t')
+def load_example(task_id:str):
+    if task_id == 'fa064fe728814f439a1cd3b72deffcd0':
+        quant_file_df = pd.read_csv('data/examples/example_quant_file_fa064fe728814f439a1cd3b72deffcd0.tsv', sep='\t')
+        annotation_file_df = pd.read_csv('data/examples/example_annotation_file_fa064fe728814f439a1cd3b72deffcd0.tsv', sep='\t')
+    elif task_id == 'd6f37a11d90c4f249974280c3fc90108':
+        quant_file_df = pd.read_csv('data/examples/example_quant_file_d6f37a11d90c4f249974280c3fc90108.csv')
+        annotation_file_df = pd.read_csv('data/examples/example_annotation_filed6f37a11d90c4f249974280c3fc90108.tsv', sep='\t')
+    elif task_id == '4d99fc25d84143bdbbf2dd07bf044e5e':
+        quant_file_df = pd.read_csv('data/examples/example_quant_file_4d99fc25d84143bdbbf2dd07bf044e5e.tsv', sep='\t')
+        annotation_file_df = pd.read_csv('data/examples/example_annotation_file_4d99fc25d84143bdbbf2dd07bf044e5e.tsv', sep='\t')
 
     return quant_file_df, annotation_file_df
 
@@ -346,6 +353,7 @@ def create_sankey_plot(feature_annotation: pd.DataFrame, top_areas: int = 5, top
     return fig
 
 
+@st.fragment
 def add_sankey_graph(feature_annotation):
     """
     Adds the Sankey diagram section to the Streamlit app.
@@ -398,14 +406,20 @@ def add_sankey_graph(feature_annotation):
 
             if fig is not None:
                 st.plotly_chart(fig, use_container_width=True)
-                svg_bytes = fig.to_image(format="svg")
-                st.download_button(
-                    label=":material/download: Download Plot as SVG",
-                    data=svg_bytes,
-                    file_name=f"sankey_plot.svg",
-                    mime="image/svg+xml",  # Set the MIME type to SVG
-                    key='sankey_plot_download'
-                )
+                btn1, btn2, _, _ = st.columns([1,1,1,1])
+                with btn1:
+                    if st.button("Generate SVG", icon=":material/manufacturing:"):
+                        with btn2:
+                            with st.spinner("Preparing SVG download..."):
+                                svg_bytes = fig.to_image(format="svg")
+                                st.download_button(
+                                    label=":material/download: Download Plot as SVG",
+                                    data=svg_bytes,
+                                    file_name=f"sankey_plot.svg",
+                                    mime="image/svg+xml",  # Set the MIME type to SVG
+                                    key='sankey_plot_download',
+                                    type='primary',
+                                )
 
                 # Add interpretation help
                 with st.expander("How to interpret this Sankey diagram"):
@@ -437,10 +451,10 @@ def add_df_and_filtering(df, key_prefix:str, default_cols: List = None):
     add_col, remove_col, _, _ = st.columns(4)
     with add_col:
         # Button to add more filter fields
-        if st.button("➕ Add Filter Field", use_container_width=True, key=f"{key_prefix}_add_btn"):
+        if st.button("➕ Add Filter Field", width='stretch', key=f"{key_prefix}_add_btn"):
             st.session_state[f"{key_prefix}_filter_count"] += 1
     with remove_col:
-        if st.button("➖ Remove Filter Field", use_container_width=True, key=f"{key_prefix}_rmv_btn"):
+        if st.button("➖ Remove Filter Field", width='stretch', key=f"{key_prefix}_rmv_btn"):
             st.session_state[f"{key_prefix}_filter_count"] -= 1
 
     filtered_df = df.astype(str).copy()
@@ -465,8 +479,9 @@ def add_df_and_filtering(df, key_prefix:str, default_cols: List = None):
             filtered_df = filtered_df[filtered_df[selected_col].str.contains(search_term, case=False, na=False)]
 
     # Show result
-    st.markdown("### 🔎 Filtered Results")
-    st.write(f"Total results: {len(filtered_df)}")
+    if st.session_state[f"{key_prefix}_filter_count"] > 0:
+        st.markdown("### 🔎 Filtered Results")
+    st.subheader(f"Total results: {len(filtered_df)}")
     all_cols = filtered_df.columns
     if default_cols:
         with st.expander('Cols to show'):

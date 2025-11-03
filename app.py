@@ -1,3 +1,4 @@
+import pickle
 from gnpsdata import workflow_fbmn
 from streamlit.components.v1 import html
 import streamlit as st
@@ -32,6 +33,10 @@ html(
     height=0,
 )
 
+example_task_ids = {
+    'load_precomputed_example': '4d99fc25d84143bdbbf2dd07bf044e5e' #Full dataset precomputed
+}
+
 
 @dataclass
 class AnalysisData:
@@ -59,6 +64,14 @@ class AnalysisData:
             if field_name in st.session_state:
                 setattr(data, field_name, st.session_state[field_name])
         return data
+    
+    @classmethod
+    def load_from_file(cls, file_path):
+        """Load data from a pickle file"""
+        with open(file_path, 'rb') as f:
+            data = pickle.load(f)
+        
+        return data
 
     @classmethod
     def data_summary(cls):
@@ -81,20 +94,21 @@ def setup_sidebar():
         threshold = query_params.get("threshold", 1000)
         blank_str = query_params.get("blank_ids", None)
 
-        load_example_data = st.checkbox(
-            "Load example",
-            help="Load example from FBMN task ID d6f37a11d90c4f249974280c3fc90108",
+        load_precomputed_example = st.checkbox(
+            "Load Precomputed Example",
+            help="Load precomputed analysis data for FBMN task ID [Link](https://gnps2.org/status?task=4d99fc25d84143bdbbf2dd07bf044e5e)",
             value=False,
-            key='load_example_check'
+            key='load_precomputed_example_check'
         )
+
+        selected_example = 'load_precomputed_example' if load_precomputed_example else None
 
         task_id = st.text_input(
             f":green-badge[Task ID] FBMN Workflow Task ID (GNPS2)",
             help="Enter the Task ID from a FBMN Workflow to retrieve the result files.",
             placeholder="enter task ID...",
-            value=gnps_task_id if not st.session_state.get(
-                'load_example_check') else "d6f37a11d90c4f249974280c3fc90108",
-            disabled=(load_example_data == True)
+            value=gnps_task_id if not (selected_example) else example_task_ids[selected_example],
+            disabled=(False if not selected_example else True)
         )
 
         intensity_thresh = st.number_input(
@@ -104,13 +118,15 @@ def setup_sidebar():
             value=float(threshold),
             step=1E2,
             help="Only detections with peak area above this number will be considered.",
+            disabled=load_precomputed_example
         )
 
         blank_ids = st.text_input(
             "Blank IDs (optional)",
-            value=blank_str if not st.session_state.get('load_example_check') else "QC",
+            value=blank_str if not load_precomputed_example else "blank",
             placeholder="Example: BLANK|IS|PoolQC|QCmix|SRM",
             help="Enter substrings to identify blank or control columns, separated by '|'. If given, the table will be filtered to remove these columns from the analysis. If not provided, all columns will be considered.",
+            disabled=load_precomputed_example
         )
 
         if not task_id:
@@ -120,16 +136,16 @@ def setup_sidebar():
             "Run Analysis",
             icon="🏁",
             help="Click to start the analysis with the provided inputs.",
-            use_container_width=True,
+            width='stretch',
             key="run_analysis_button",
-            disabled=not (task_id or load_example_data)
+            disabled=not task_id
         )
 
         if st.button(
                 "Restart Session",
                 icon="♻️",
                 key="restart_session",
-                use_container_width=True,
+                width='stretch',
                 type="primary",
         ):
             st.session_state.clear()
@@ -150,7 +166,7 @@ def setup_sidebar():
             "[Feature Based Molecular Networking](https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/fbmn/)")
 
     return {
-        'load_example_data': load_example_data,
+        'load_precomputed_example': load_precomputed_example,
         'task_id': task_id,
         'intensity_thresh': intensity_thresh,
         'blank_ids': blank_ids,
@@ -161,7 +177,7 @@ def setup_sidebar():
 def load_data(config):
     """Load and process initial data"""
     from utils import fbmn_quant_download_wrapper, fbmn_lib_download_wrapper
-    if not config['load_example_data']:
+    if not config['load_precomputed_example']:
         with st.spinner("Downloading Task result files..."):
             st.session_state.quant_file_df = fbmn_quant_download_wrapper(config['task_id'])
             st.session_state.annotation_file_df = fbmn_lib_download_wrapper(config['task_id'])
@@ -173,7 +189,7 @@ def load_data(config):
                 f"(https://gnps2.org/resultfile?task={config['task_id']}&file=nf_output/library/merged_results_with_gnps.tsv)",
             )
     else:
-        st.session_state.quant_file_df, st.session_state.annotation_file_df = load_example()
+        st.session_state.quant_file_df, st.session_state.annotation_file_df = load_example(task_id=config['task_id'])
 
 
 def process_analysis_data(quant_file_df, annotation_file_df, config, data: AnalysisData):
@@ -231,9 +247,14 @@ def process_analysis_data(quant_file_df, annotation_file_df, config, data: Analy
         data.class_compound_dict = _class_compounds_dict
         data.class_compound_dict_analog = _class_compounds_dict_analog
         data.save_to_session()
+        # save data to load as precomputed demo - uncomment to regenerate cache files
+        # task_id = config.get('task_id', 'unknown')
+        # pickle.dump(data, open(f'./data/examples/processed_analysis_data_{task_id}.pkl', 'wb'))
+
         print('[process_analysis_data]  saved to session...')
 
 
+@st.fragment
 def display_summary_statistics(data: AnalysisData):
     """Display drug detection summary statistics"""
     st.header("📊 Drug Detection Summary Statistics")
@@ -365,49 +386,82 @@ def display_summary_statistics(data: AnalysisData):
         )
 
 
+@st.fragment
 def display_feature_annotation_table(data: AnalysisData):
     """Display and handle feature annotation table editing"""
     from utils import add_df_and_filtering, conditional_highlighter_low_confidence
 
     st.header("🔬 Feature Annotation Table")
-    st.write(
-        "You can edit the table below and then rerun the analysis with your modifications. "
-        "[:material/help: Learn how](https://www.youtube.com/watch?v=6tah69LkfxE&list=TLGGKK4Dnf1gepcwNTA2MjAyNQ)"
-    )
-    st.markdown(
-        f"[:material/report: Report an annotation issue]({repo_link}/issues/new?assignees=&labels=bug&template=bug_report.md&title=Feature+Annotation+Issue)"
-    )
-    st.warning(
-        "***Before editing** the data, please clear all filters.*\n\n"
-    )
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        with st.expander(
+            "**Edit & Rerun**"):
+            st.markdown(
+            "You can edit the table below and then rerun the analysis with your modifications.\n\n"
+            "[:material/help: Learn how](https://www.youtube.com/watch?v=6tah69LkfxE&list=TLGGKK4Dnf1gepcwNTA2MjAyNQ)"
+        )
+    with col2:
+        with st.expander(
+            "**Before Editing**"):
+            st.markdown(
+            "Please clear all filters before editing the data."
+        )
+    with col3:
+        with st.expander(
+            "**Report Issues**", 
+            icon=":material/report:"):
+            st.markdown(
+            f"[Report an annotation issue]({repo_link}/issues/new?assignees=&labels=bug&template=bug_report.md&title=Feature+Annotation+Issue)"
+        )
+    
+    data_df = data.load_from_session().feature_annotation.copy()
 
-    # Check size before styling the display dataframe
-    if data.feature_annotation.size <= 262144:
-        st.warning(
-            ":red[**Low confidence**]: Annotations with low confidence (i.e., cosine score < 0.9, matched peaks <= 2) are highlighted in red. ")
-    else:
-        st.warning(f":red[**Low confidence**]: Annotations with low confidence (i.e., cosine score < 0.9, matched peaks <= 2) are **not highlighted** (dataframe too large). Please, inspect manually.")
-
-    filtered_df = add_df_and_filtering(data.feature_annotation, "feature_annotation_filtered")
+    filtered_df = add_df_and_filtering(data_df, "feature_annotation_filtered")
 
     # Apply styling only if the filtered dataframe is small enough
     edited_df = st.data_editor(
         conditional_highlighter_low_confidence(filtered_df),
         key="feature_annotation_editor",
-        use_container_width=True,
+        width='stretch',
         num_rows="dynamic",
         height=400,
         disabled=["CosineScore", "MatchedPeaks"]
     )
 
+     # Check size before styling the display dataframe
+    
+    low_confidence_count = ((data.feature_annotation['CosineScore'].astype(float) < 0.9) & (data.feature_annotation['MatchedPeaks'].astype(int) <= 2)).sum()
+    
+    if data.feature_annotation.size <= 262144:
+        st.warning(
+            f":red-badge[**{low_confidence_count} Low confidence annotations**]: Features with cosine score < 0.9, matched peaks <= 2 are highlighted in red.")
+    else:
+        st.warning(f":red-badge[**{low_confidence_count} Low confidence annotations**]: Features with cosine score < 0.9, matched peaks <= 2 are **not highlighted** (dataframe too large). Please, inspect manually.")
+
+
     # Rerun button
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button(
+            "Rerun Removing Low Confidence",
+            width='stretch',
+            icon=':material/replay:',
+            disabled=(low_confidence_count == 0),
+            help="No low confidence annotations to remove." if low_confidence_count == 0 else "Click to remove low confidence annotations (cosine score < 0.9 and matched peaks <= 2) and rerun the analysis."
+            ):
+            data.feature_annotation = data.feature_annotation[~((data.feature_annotation['CosineScore'].astype(float) < 0.9) & (data.feature_annotation['MatchedPeaks'].astype(int) <= 2))]
+            data.save_to_session()
+            st.session_state['rerun_analysis'] = True
+            st.rerun()
     with col2:
+        contains_filter = st.session_state.get('feature_annotation_filtered_filter_count', 0) > 0
         if st.button(
                 "🔄 Rerun Analysis with Edited Data",
-                use_container_width=True,
+                width='stretch',
                 type="primary",
                 key="rerun_analysis_button",
+                disabled=(st.session_state.get('feature_annotation_filtered_filter_count', 0) > 0),
+                help="Click to rerun the analysis using the edited feature annotation table." if not contains_filter else "Please :red-badge[clear all filters before editing] and rerunning the analysis."
         ):
             st.session_state['rerun_analysis'] = True
 
@@ -446,12 +500,13 @@ def display_drug_detection_tables(data: AnalysisData):
     with table_tab:
         #Conditionally highlight "Yes" values in the tables (if df is small enough)
         st.subheader("Excluding Drug Analogs")
-        st.dataframe(conditional_highlighter_yes(stratified_df_clean), use_container_width=True)
+        st.dataframe(conditional_highlighter_yes(stratified_df_clean), width='stretch')
 
         with st.expander("Show results including drug analogs"):
-            st.dataframe(conditional_highlighter_yes(stratified_df_analogs_clean), use_container_width=True)
+            st.dataframe(conditional_highlighter_yes(stratified_df_analogs_clean), width='stretch')
 
 
+@st.fragment
 def display_drug_class_summary(data: AnalysisData):
     """Display drug class summary with UpSet plot and tables"""
     import matplotlib.pyplot as plt
@@ -539,6 +594,7 @@ def create_upset_plot(upset_class_count, n_top_classes, max_samples, upset_analo
         return None, f"Error creating UpSet plot: {str(e)}"
 
 
+@st.fragment
 def display_upset_plot(upset_fig, error_message=None):
     """Display UpSet plot in Streamlit interface"""
     import matplotlib.pyplot as plt
@@ -567,7 +623,7 @@ def display_upset_plot(upset_fig, error_message=None):
 
         _, upset_col, _ = st.columns([1, 6, 1])
         with upset_col:
-            st.image(svg, use_container_width=False)
+            st.image(svg, width='content')
             st.download_button(
                 label=":material/download: Download as SVG",
                 data=svg,
@@ -600,7 +656,7 @@ def display_drug_class_tables(upset_class_count, upset_analog_inclusion):
         .reset_index()
         .rename(columns={"index": "Sample"})
     )
-    st.dataframe(class_count_df_display, use_container_width=True)
+    st.dataframe(class_count_df_display, width='stretch')
 
 
 ###############################
@@ -626,12 +682,24 @@ if config['run_analysis'] or st.session_state.get("rerun_analysis", False):
         if not st.session_state.get("rerun_analysis"):
             print('[main] First run - Reading tables from files and downloading')
             load_data(config)
-            data = AnalysisData()
-        else:
-            data = AnalysisData.load_from_session()
 
-        # Process analysis
-        process_analysis_data(st.session_state.quant_file_df, st.session_state.annotation_file_df, config, data)
+            if config['load_precomputed_example']:
+                st.success(
+                    "Cached analysis data loaded successfully. You can edit the feature annotation table and rerun the analysis.\n"
+                    f"- **Task ID:** {config['task_id']} | **Peak threshold:** {int(config['intensity_thresh']):,} | **Blank IDs:** {config['blank_ids']}"
+                )
+                data = AnalysisData.load_from_file('./data/examples/processed_analysis_data_4d99fc25d84143bdbbf2dd07bf044e5e.pkl')
+                data.save_to_session()
+            else:
+                data = AnalysisData()
+                # Process analysis
+                process_analysis_data(st.session_state.quant_file_df, st.session_state.annotation_file_df, config, data)
+                data.save_to_session()
+        else:
+            print('[main] Rerun - Reading data from session state')
+            data = AnalysisData.load_from_session()
+            # Process analysis with updated data
+            process_analysis_data(st.session_state.quant_file_df, st.session_state.annotation_file_df, config, data)
 
         st.session_state.run_analysis = True
 
@@ -663,9 +731,8 @@ if st.session_state.run_analysis:
     display_drug_class_summary(data)
 
     # Add Sankey graph
-    with st.spinner("Generating Sankey plot..."):
-        st.markdown("---")
-        add_sankey_graph(data.feature_annotation)
+    st.markdown("---")
+    add_sankey_graph(data.feature_annotation)
     print('[main] All visualizations rendered')
 
 else:
