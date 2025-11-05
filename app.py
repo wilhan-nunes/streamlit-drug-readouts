@@ -33,7 +33,20 @@ html(
     height=0,
 )
 
-EXAMPLE_TASK_ID = '4d99fc25d84143bdbbf2dd07bf044e5e'
+EXAMPLE_1 = {
+    "description": "Alzheimer's Disease Brain samples",
+    "task_id": "4d99fc25d84143bdbbf2dd07bf044e5e",
+    "blank_ids": "blank",
+    "threshold": 1000,
+}
+
+# HNRC dataset example
+EXAMPLE_2 = {
+    "description": "HNRC (HIV) cohort samples",
+    "task_id": "b5b666da713b48e7ab3cb1855fdd2b89",
+    "blank_ids": None,
+    "threshold": 1000,
+}
 
 
 @dataclass
@@ -92,7 +105,6 @@ class AnalysisData:
                                 print(field_name, "not initialized")
 
 
-
 def setup_sidebar():
     """Setup sidebar inputs and return configuration values"""
     with st.sidebar:
@@ -108,15 +120,21 @@ def setup_sidebar():
 
         load_example = st.checkbox(
             "Load Example",
-            help=F"Load analysis data for FBMN task ID [Link](https://gnps2.org/status?task={EXAMPLE_TASK_ID})",
+            help=F"Load analysis data for FBMN task ID",
             value=False,
-            key='load__example_check'
+            key='load_example_check'
         )
 
         if load_example:
-            gnps_task_id = EXAMPLE_TASK_ID
-            threshold = 1000
-            blank_str = 'blank'
+            selected_example = st.selectbox(
+                "Select Example Task ID",
+                options=["Example 1", "Example 2"],
+                format_func=lambda x: EXAMPLE_1['description'] if x == "Example 1" else EXAMPLE_2['description']
+            )
+            example = EXAMPLE_1 if selected_example == "Example 1" else EXAMPLE_2
+            gnps_task_id = example["task_id"]
+            threshold = example["threshold"]
+            blank_str = example["blank_ids"]
 
         task_id = st.text_input(
             f":green-badge[Task ID] FBMN Workflow Task ID (GNPS2)",
@@ -136,12 +154,12 @@ def setup_sidebar():
 
         blank_ids = st.text_input(
             "Blank IDs (optional)",
-            value=blank_str if not load_example else "blank",
+            value=blank_str,
             placeholder="Example: BLANK|IS|PoolQC|QCmix|SRM",
             help="Enter substrings to identify blank or control columns, separated by '|'. If given, the table will be filtered to remove these columns from the analysis. If not provided, all columns will be considered.",
         )
 
-        blank_ids = blank_ids.strip()
+        blank_ids = blank_ids.strip() if blank_ids else None
 
         if not task_id:
             st.warning("Please enter a Task ID from a FBMN Workflow to proceed.")
@@ -275,7 +293,7 @@ def cached_process_analysis(quant_file_df, annotation_file_df, config, data):
 
 def run_analysis_wrapper(task_id, data):
     """Run analysis and return updated data object"""
-    if task_id == EXAMPLE_TASK_ID:
+    if task_id in [EXAMPLE_1["task_id"], EXAMPLE_2["task_id"]]:
         return cached_process_analysis(
             st.session_state.quant_file_df,
             st.session_state.annotation_file_df,
