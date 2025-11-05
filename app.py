@@ -122,14 +122,16 @@ def setup_sidebar():
             "Load Example",
             help=F"Load analysis data for FBMN task ID",
             value=False,
-            key='load_example_check'
+            key='load_example_check',
+            on_change=lambda: st.session_state.pop('run_analysis', None)
         )
 
         if load_example:
             selected_example = st.selectbox(
                 "Select Example Task ID",
                 options=["Example 1", "Example 2"],
-                format_func=lambda x: EXAMPLE_1['description'] if x == "Example 1" else EXAMPLE_2['description']
+                format_func=lambda x: EXAMPLE_1['description'] if x == "Example 1" else EXAMPLE_2['description'],
+                on_change=lambda: st.session_state.pop('run_analysis', None)
             )
             example = EXAMPLE_1 if selected_example == "Example 1" else EXAMPLE_2
             gnps_task_id = example["task_id"]
@@ -178,10 +180,10 @@ def setup_sidebar():
                 icon="♻️",
                 key="restart_session",
                 width='stretch',
-                type="primary",
+                type="primary"
         ):
             st.session_state.clear()
-            st.session_state['load_example_data'] = False
+            st.session_state.update({'load_example_check': False})
             st.rerun()
 
         # Contributors and documentation sections
