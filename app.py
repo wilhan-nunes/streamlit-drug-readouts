@@ -1,9 +1,8 @@
 import pickle
-import os
-from gnpsdata import workflow_fbmn
+
 from streamlit.components.v1 import html
 import streamlit as st
-from utils import display_comparison_statistics, load_example, get_git_short_rev, highlight_low_confidence
+from utils import display_comparison_statistics, get_git_short_rev
 from dataclasses import dataclass
 from typing import Optional
 import plotly.express as px
@@ -34,9 +33,7 @@ html(
     height=0,
 )
 
-example_task_ids = {
-    'load_precomputed_example': '4d99fc25d84143bdbbf2dd07bf044e5e' #Full dataset precomputed
-}
+EXAMPLE_TASK_ID = '4d99fc25d84143bdbbf2dd07bf044e5e'
 
 
 @dataclass
@@ -95,22 +92,6 @@ class AnalysisData:
                                 print(field_name, "not initialized")
 
 
-def check_and_generate_cached_example():
-    """Check if cached pkl file exists, generate it if not."""
-    pkl_path = './data/examples/processed_analysis_data_4d99fc25d84143bdbbf2dd07bf044e5e.pkl'
-    
-    if os.path.exists(pkl_path):
-        return True
-    
-    print(f'[check_cached_example] Generating cached file...')
-    try:
-        from generate_cached_example import main as generate_cache
-        generate_cache()
-        return True
-    except Exception as e:
-        print(f"[check_cached_example] Error: {e}")
-        return False
-
 
 def setup_sidebar():
     """Setup sidebar inputs and return configuration values"""
@@ -122,22 +103,26 @@ def setup_sidebar():
         gnps_task_id = query_params.get("task_id", "")
         threshold = query_params.get("threshold", 1000)
         blank_str = query_params.get("blank_ids", None)
+        if blank_str:
+            blank_str = blank_str.strip()
 
-        load_precomputed_example = st.checkbox(
-            "Load Precomputed Example",
-            help="Load precomputed analysis data for FBMN task ID [Link](https://gnps2.org/status?task=4d99fc25d84143bdbbf2dd07bf044e5e)",
+        load_example = st.checkbox(
+            "Load Example",
+            help=F"Load analysis data for FBMN task ID [Link](https://gnps2.org/status?task={EXAMPLE_TASK_ID})",
             value=False,
-            key='load_precomputed_example_check'
+            key='load__example_check'
         )
 
-        selected_example = 'load_precomputed_example' if load_precomputed_example else None
+        if load_example:
+            gnps_task_id = EXAMPLE_TASK_ID
+            threshold = 1000
+            blank_str = 'blank'
 
         task_id = st.text_input(
             f":green-badge[Task ID] FBMN Workflow Task ID (GNPS2)",
             help="Enter the Task ID from a FBMN Workflow to retrieve the result files.",
             placeholder="enter task ID...",
-            value=gnps_task_id if not (selected_example) else example_task_ids[selected_example],
-            disabled=(False if not selected_example else True)
+            value=gnps_task_id,
         )
 
         intensity_thresh = st.number_input(
@@ -147,16 +132,16 @@ def setup_sidebar():
             value=float(threshold),
             step=1E2,
             help="Only detections with peak area above this number will be considered.",
-            disabled=load_precomputed_example
         )
 
         blank_ids = st.text_input(
             "Blank IDs (optional)",
-            value=blank_str if not load_precomputed_example else "blank",
+            value=blank_str if not load_example else "blank",
             placeholder="Example: BLANK|IS|PoolQC|QCmix|SRM",
             help="Enter substrings to identify blank or control columns, separated by '|'. If given, the table will be filtered to remove these columns from the analysis. If not provided, all columns will be considered.",
-            disabled=load_precomputed_example
         )
+
+        blank_ids = blank_ids.strip()
 
         if not task_id:
             st.warning("Please enter a Task ID from a FBMN Workflow to proceed.")
@@ -195,7 +180,7 @@ def setup_sidebar():
             "[Feature Based Molecular Networking](https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/fbmn/)")
 
     return {
-        'load_precomputed_example': load_precomputed_example,
+        'load_precomputed_example': load_example,
         'task_id': task_id,
         'intensity_thresh': intensity_thresh,
         'blank_ids': blank_ids,
@@ -203,26 +188,23 @@ def setup_sidebar():
     }
 
 
-def load_data(config):
+def load_data(task_id):
     """Load and process initial data"""
     from utils import fbmn_quant_download_wrapper, fbmn_lib_download_wrapper
-    if not config['load_precomputed_example']:
-        with st.spinner("Downloading Task result files..."):
-            st.session_state.quant_file_df = fbmn_quant_download_wrapper(config['task_id'])
-            st.session_state.annotation_file_df = fbmn_lib_download_wrapper(config['task_id'])
+    with st.spinner("Downloading Task result files..."):
+        st.session_state.quant_file_df = fbmn_quant_download_wrapper(task_id)
+        st.session_state.annotation_file_df = fbmn_lib_download_wrapper(task_id)
 
-            st.markdown(
-                f"[:material/download: Input Quant table]"
-                f"(https://gnps2.org/result?task={config['task_id']}&viewname=quantificationdownload&resultdisplay_type=task) | "
-                f"[:material/download: Input Annotation table]"
-                f"(https://gnps2.org/resultfile?task={config['task_id']}&file=nf_output/library/merged_results_with_gnps.tsv)",
-            )
-    else:
-        st.session_state.quant_file_df, st.session_state.annotation_file_df = load_example(task_id=config['task_id'])
+        st.markdown(
+            f"[:material/download: Input Quant table]"
+            f"(https://gnps2.org/result?task={task_id}&viewname=quantificationdownload&resultdisplay_type=task) | "
+            f"[:material/download: Input Annotation table]"
+            f"(https://gnps2.org/resultfile?task={task_id}&file=nf_output/library/merged_results_with_gnps.tsv)",
+        )
 
 
 def process_analysis_data(quant_file_df, annotation_file_df, config, data: AnalysisData):
-    """Process the main analysis data"""
+    """Process the main analysis data and return updated data object"""
     print('[process_analysis_data] triggered...')
     _drug_metadata_file = "data/GNPS_Drug_Library_Metadata_Drugs.csv"
     _analog_metadata_file = "data/GNPS_Drug_Library_Metadata_Drug_Analogs_Updated.csv"
@@ -266,27 +248,59 @@ def process_analysis_data(quant_file_df, annotation_file_df, config, data: Analy
         _class_count_df["total_matches"] = _class_count_df.sum(axis=1)
         _class_count_df_analog["total_matches"] = _class_count_df.sum(axis=1)
 
-        # Update data object
-        data.feature_annotation = _feature_annotation
-        data.stratified_df = _stratified_df
-        data.stratified_df_analogs = _stratified_df_analogs
-        data.class_count_df = _class_count_df
-        data.class_count_df_analog = _class_count_df_analog
-        data.default_excluded_features = _excluded_features
-        data.class_compound_dict = _class_compounds_dict
-        data.class_compound_dict_analog = _class_compounds_dict_analog
+        # Update data object with computed values
+        updates = {
+            'feature_annotation': _feature_annotation,
+            'stratified_df': _stratified_df,
+            'stratified_df_analogs': _stratified_df_analogs,
+            'class_count_df': _class_count_df,
+            'class_count_df_analog': _class_count_df_analog,
+            'default_excluded_features': _excluded_features,
+            'class_compound_dict': _class_compounds_dict,
+            'class_compound_dict_analog': _class_compounds_dict_analog
+        }
+        
+        for field, value in updates.items():
+            setattr(data, field, value)
         data.save_to_session()
-        # save data to load as precomputed demo - uncomment to regenerate cache files
-        # task_id = config.get('task_id', 'unknown')
-        # pickle.dump(data, open(f'./data/examples/processed_analysis_data_{task_id}.pkl', 'wb'))
 
-        print('[process_analysis_data]  saved to session...')
+        print('[process_analysis_data] saved to session...')
+        return data
+
+
+@st.cache_data
+def cached_process_analysis(quant_file_df, annotation_file_df, config, data):
+    """Cached wrapper for process_analysis_data to improve performance on repeated runs"""
+    return process_analysis_data(quant_file_df, annotation_file_df, config, data)
+
+def run_analysis_wrapper(task_id, data):
+    """Run analysis and return updated data object"""
+    if task_id == EXAMPLE_TASK_ID:
+        return cached_process_analysis(
+            st.session_state.quant_file_df,
+            st.session_state.annotation_file_df,
+            config,
+            data
+        )
+    else:
+        return process_analysis_data(
+            st.session_state.quant_file_df,
+            st.session_state.annotation_file_df,
+            config,
+            data,
+        )
 
 
 @st.fragment
 def display_summary_statistics(data: AnalysisData):
     """Display drug detection summary statistics"""
     st.header("📊 Drug Detection Summary Statistics")
+    
+    # Safety check: ensure data is properly loaded
+    if data.stratified_df is None:
+        st.error("Data not properly loaded. Please rerun the analysis.")
+        return
+    
     tab1, tab2 = st.tabs(["📈 Summary Metrics", "📊 Top Pharmacological Classes"])
     with tab1:
         with st.spinner("Calculating summary..."):
@@ -710,31 +724,17 @@ if config['run_analysis'] or st.session_state.get("rerun_analysis", False):
         # Load data
         if not st.session_state.get("rerun_analysis"):
             print('[main] First run - Reading tables from files and downloading')
-            load_data(config)
+            load_data(config['task_id'])
 
-            if config['load_precomputed_example']:
-                # Check if cached file exists, generate if needed
-                with st.spinner("Loading precomputed example..."):
-                    if check_and_generate_cached_example():
-                        data = AnalysisData.load_from_file('./data/examples/processed_analysis_data_4d99fc25d84143bdbbf2dd07bf044e5e.pkl')
-                        data.save_to_session()
-                        st.success(
-                            "Cached analysis data loaded successfully. You can edit the feature annotation table and rerun the analysis.\n"
-                            f"- **Task ID:** {config['task_id']} | **Peak threshold:** {int(config['intensity_thresh']):,} | **Blank IDs:** {config['blank_ids']}"
-                        )
-                    else:
-                        st.error("Failed to load or generate cached example. Please try again.")
-                        st.stop()
-            else:
-                data = AnalysisData()
-                # Process analysis
-                process_analysis_data(st.session_state.quant_file_df, st.session_state.annotation_file_df, config, data)
-                data.save_to_session()
+            data = AnalysisData()
+            # Process analysis
+            data = run_analysis_wrapper(config["task_id"], data)
+            data.save_to_session()
         else:
             print('[main] Rerun - Reading data from session state')
             data = AnalysisData.load_from_session()
             # Process analysis with updated data
-            process_analysis_data(st.session_state.quant_file_df, st.session_state.annotation_file_df, config, data)
+            data = run_analysis_wrapper(config["task_id"], data)
 
         st.session_state.run_analysis = True
 
