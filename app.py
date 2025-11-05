@@ -1,4 +1,5 @@
 import pickle
+import time
 
 from streamlit.components.v1 import html
 import streamlit as st
@@ -12,7 +13,6 @@ import warnings
 
 warnings.filterwarnings('ignore', category=FutureWarning, module='upsetplot')
 
-# Set page configuration
 page_title = "Drug Readout Analysis"
 app_version = "2025-08-17"
 git_hash = get_git_short_rev()
@@ -777,20 +777,33 @@ if st.session_state.run_analysis:
     display_summary_statistics(data)
     st.divider()
 
+    with st.spinner("Rendering Feature Annotation Table..."):
+        time.sleep(0.5)
     display_feature_annotation_table(data)
     st.divider()
 
+
+    with st.spinner("Rendering Drug Detection Tables..."):
+        time.sleep(0.5)
     display_drug_detection_tables(data)
     st.divider()
 
+
+    with st.spinner(("Rendering Drug Class Summary Table...")):
+        time.sleep(0.5)
     display_drug_class_summary(data)
 
     # Add Sankey graph
     st.markdown("---")
+
+    with st.spinner("Rendering Sankey Plot..."):
+        time.sleep(0.5)
     add_sankey_graph(data.feature_annotation)
     print('[main] All visualizations rendered')
 
 else:
+    with st.spinner("Rendering Welcome page..."):
+        time.sleep(0.5)
     print('Welcome Page Loaded')
     from welcome import welcome_page
 
