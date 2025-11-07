@@ -33,19 +33,19 @@ html(
     height=0,
 )
 
+# HNRC dataset example
 EXAMPLE_1 = {
+    "description": "HNRC (HIV) cohort samples",
+    "task_id": "a322acf7936c4f91a41fd2f267d9b613",
+    "blank_ids": None,
+    "threshold": 50000,
+}
+
+EXAMPLE_2 = {
     "description": "Alzheimer's Disease Brain samples",
     "task_id": "4d99fc25d84143bdbbf2dd07bf044e5e",
     "blank_ids": "blank",
     "threshold": 1000,
-}
-
-# HNRC dataset example
-EXAMPLE_2 = {
-    "description": "HNRC (HIV) cohort samples",
-    "task_id": "8575b15c9f884d81b4b20873d7fc2ae8",
-    "blank_ids": None,
-    "threshold": 50000,
 }
 
 
