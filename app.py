@@ -36,7 +36,7 @@ html(
 # HNRC dataset example
 EXAMPLE_1 = {
     "description": "HNRC (HIV) cohort samples",
-    "task_id": "a322acf7936c4f91a41fd2f267d9b613",
+    "task_id": "c49f44ca06ff43f1a685f20ad326de0c",
     "blank_ids": None,
     "threshold": 50000,
 }
