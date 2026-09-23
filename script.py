@@ -23,6 +23,10 @@ def load_and_filter_features(
         feature = pd.read_csv(features_data)
     elif isinstance(features_data, pd.DataFrame):
         feature = features_data.copy()
+    else:
+        raise TypeError(
+            f"features_data must be a file path or DataFrame, got {type(features_data).__name__}"
+        )
 
     feature_filtered = feature.set_index("row ID").filter(regex="|".join(file_types))
     feature_filtered[feature_filtered < intensity_threshold] = 0
@@ -71,6 +75,10 @@ def load_and_merge_annotations(
         annotation = pd.read_csv(fbmn_annotation_data, sep="\t")
     elif isinstance(fbmn_annotation_data, pd.DataFrame):
         annotation = fbmn_annotation_data
+    else:
+        raise TypeError(
+            f"fbmn_annotation_data must be a file path or DataFrame, got {type(fbmn_annotation_data).__name__}"
+        )
 
     annotation_filtered = annotation[["#Scan#", "SpectrumID", "Compound_Name", "MQScore", "SharedPeaks"]]
     annotation_filtered.columns = ["FeatureID", "SpectrumID", "Compound_Name", "CosineScore", "MatchedPeaks"]
