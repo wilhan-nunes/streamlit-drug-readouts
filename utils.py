@@ -7,7 +7,6 @@ import plotly.graph_objects as go
 import requests
 import streamlit as st
 import plotly.express as px
-from gnpsdata import workflow_fbmn
 
 
 def get_git_short_rev():
@@ -93,14 +92,48 @@ def generate_colors(n, base_color=(0.55, 0.85, 0.9)):
     return colors
 
 
+GNPS2_SERVERS = ["https://gnps2.org", "https://beta.gnps2.org", "https://de.gnps2.org"]
+
+
+def get_gnps2_resultfile_dataframe(task_id: str, result_path: str, sep: str = "\t") -> pd.DataFrame:
+    """
+    Downloads a GNPS2 task result file into a DataFrame, trying each GNPS2 server in turn.
+
+    Replaces gnpsdata's pd.read_csv(url) download, which is blocked by Cloudflare (403 for the
+    default Python-urllib User-Agent) and silently returns None when every server fails.
+
+    :raises RuntimeError: if the file could not be downloaded from any server.
+    """
+    errors = []
+    for server in GNPS2_SERVERS:
+        try:
+            response = requests.get(
+                f"{server}/resultfile",
+                params={"task": task_id, "file": result_path},
+                headers={"User-Agent": f"streamlit-drug-readouts (requests/{requests.__version__})"},
+                timeout=(10, 300),
+                stream=True,
+            )
+            response.raise_for_status()
+            response.raw.decode_content = True
+            return pd.read_csv(response.raw, sep=sep)
+        except Exception as e:
+            errors.append(f"{server}: {type(e).__name__}: {e}")
+    raise RuntimeError(
+        f"Could not download '{result_path}' for task {task_id} from GNPS2. "
+        "The server may be down or the task may not have this file.\n" + "\n".join(errors)
+    )
+
+
+# Exceptions are not cached by st.cache_data, so failed downloads are retried on the next run.
 @st.cache_data
 def fbmn_quant_download_wrapper(task_id):
-    return workflow_fbmn.get_quantification_dataframe(task_id, gnps2=True)
+    return get_gnps2_resultfile_dataframe(task_id, "nf_output/clustering/featuretable_reformated.csv", sep=",")
 
 
 @st.cache_data
 def fbmn_lib_download_wrapper(task_id):
-    return workflow_fbmn.get_library_match_dataframe(task_id, gnps2=True)
+    return get_gnps2_resultfile_dataframe(task_id, "nf_output/library/merged_results_with_gnps.tsv")
 
 
 @st.cache_data
