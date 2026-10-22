@@ -3,6 +3,14 @@
 
 This project is a Streamlit-based application designed to process and analyze drug-related data. It allows users to upload input a GNPS2 FBMN task ID to fetch task results, and perform drug readouts from the data.
 
+## Standalone web app (under development)
+
+The browser-based version is [webapp/drug_readouts.html](webapp/drug_readouts.html). It is a self-contained HTML file that can be downloaded and opened locally without Python or a server. Upload the two GNPS2 FBMN result tables to analyze them offline; fetching results by GNPS2 task ID still needs an internet connection. See the [web app README](webapp/README.md) for usage, limitations, and the [changelog](webapp/CHANGELOG.md) for development updates.
+
+The browser app can optionally fetch the latest GNPS Drug Library metadata from Zenodo and cache it in the current browser for later offline use. The downloaded HTML itself keeps its original embedded metadata; see the web app README for the distinction.
+
+When the drug metadata CSVs change, rebuild the standalone page with `python3 webapp/build_drug_readouts.py`; edit [its source HTML](webapp/source/drug_readouts.html) for UI changes.
+
 ## Features
 
 - Fetch task result files (quant table and annotation table) using the task ID.
