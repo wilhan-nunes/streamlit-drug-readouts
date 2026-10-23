@@ -6,8 +6,8 @@ def welcome_page():
     st.markdown("""
     ### 📖 Citation
     Haoqi Nina Zhao, Kine Eide Kvitne, Corinna Brungs, Siddharth Mohan, Vincent Charron-Lamoureux, *et al.*  
-    **Empirically establishing drug exposure records directly from untargeted metabolomics data**  
-    *bioRxiv* 2024.10.07.617109; doi: [https://doi.org/10.1101/2024.10.07.617109](https://doi.org/10.1101/2024.10.07.617109)
+    **A resource to empirically establish drug exposure records directly from untargeted metabolomics data**<br>
+    *Nature Communications* 16, 10600 (2025); doi: [https://doi.org/10.1038/s41467-025-65993-5](https://doi.org/10.1038/s41467-025-65993-5)
 
 
     
