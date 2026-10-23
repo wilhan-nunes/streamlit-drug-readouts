@@ -57,6 +57,13 @@ When the drug metadata CSVs change, rebuild the standalone page with `python3 we
 - `requirements.txt`: Lists the required Python libraries.
 - `README.md`: Project documentation.
 
+## Citation
+
+Zhao H.N., Kvitne K.E., Brungs C., Mohan S., Charron-Lamoureux V. et al.
+*A resource to empirically establish drug exposure records directly from
+untargeted metabolomics data.* Nature Communications 16, 10600 (2025).
+<https://doi.org/10.1038/s41467-025-65993-5>
+
 ## Contributing
 
 Contributions are welcome! Please fork the repository and submit a pull request with your changes.
