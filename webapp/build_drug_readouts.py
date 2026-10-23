@@ -146,6 +146,8 @@ def write_atomically(path, data):
                                          suffix=".tmp", delete=False) as stream:
             temp_name = stream.name
             stream.write(data)
+        # NamedTemporaryFile creates 0600; web servers need to read the page.
+        os.chmod(temp_name, 0o644)
         os.replace(temp_name, path)
     finally:
         if temp_name and os.path.exists(temp_name):
@@ -175,7 +177,7 @@ def main():
         page, sizes = build((args.drugs, args.analogs))
     if args.check:
         if not args.output.exists() or args.output.read_bytes() != page:
-            fail(f"{args.output} is missing or stale; run python3 webapp/build_drug_readouts.py")
+            fail(f"{args.output} is missing or stale; rerun this script without --check")
         print(f"build_drug_readouts: {args.output} is up to date")
         return
     if args.output.exists() and args.output.read_bytes() == page:
